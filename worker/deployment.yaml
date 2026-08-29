@@ -110,6 +110,15 @@ spec:
     spec:
       # The pod holds a PVC bound by local-path to a node directory, so it cannot move anyway; this
       # says so explicitly rather than leaving it as an emergent property of the storage class.
+      # GHCR is private, so the pull needs a credential. It is a token with read:packages ONLY --
+      # deliberately not the one CI pushes with, and deliberately not a Fly token, which is the
+      # objection that keeps the Fly Prometheus scrape switched off: nothing in this cluster should
+      # hold a credential that can deploy to production elsewhere.
+      #
+      # Created out of band, not committed. See infra/kubernetes/worker/README.md.
+      imagePullSecrets:
+        - name: ghcr-pull
+
       nodeSelector:
         kubernetes.io/hostname: k3s-worker-1
       terminationGracePeriodSeconds: 30

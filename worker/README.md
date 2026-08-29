@@ -1,0 +1,54 @@
+# The PL worker on k3s
+
+`deployment.yaml` is the whole deployment. It carries no secrets: two are created out of band and
+are the only things standing between a fresh cluster and a running worker.
+
+## The two secrets, and why they are not in git
+
+```
+kinowo/worker-pl-secrets   the worker's own credentials (Mongo, TMDB, OMDb, Zyte, Telegram,
+                           the Decodo proxy, Sentry)
+kinowo/ghcr-pull           a dockerconfigjson for ghcr.io, read:packages ONLY
+```
+
+They are applied with `kubectl apply -f -` from a manifest built on the operator's machine out of
+the repo-root `.env.local`, piped over SSH rather than passed as arguments — an argv would put every
+value into the remote process list for as long as the command ran.
+
+`ghcr-pull` is a **read-only** token on purpose, and specifically NOT the token CI pushes with and
+NOT a Fly token. Nothing in this cluster should hold a credential that can deploy to production
+somewhere else; that is the same reasoning that keeps `fleet.prometheus.scrapeFly` switched off on
+monitoring-1.
+
+## MONGODB_URI points at the private address
+
+```
+mongodb://kinowo_app:…@10.20.0.10:27017/kinowo?authSource=kinowo&directConnection=true
+```
+
+Not the WireGuard address. This is the entire latency case for moving the worker here: on Fly it
+reached mongo-1 through the 6PN tunnel, and here it is one hop across the Hetzner private subnet.
+`directConnection=true` because the replica set's member host is that same private address and the
+driver must not try to rediscover the topology.
+
+**`MONGODB_DB` is deliberately unset.** `Country.mongoDb` derives the database name from
+`KINOWO_COUNTRIES`, so setting it would pin every country to one database.
+
+## Deploying
+
+CI builds `ghcr.io/pawelkrupinski/movies-worker:<sha>` (`.github/workflows/build-worker-image.yaml`).
+To roll a build out:
+
+```
+ssh root@2.28.52.210 k3s kubectl -n kinowo set image deployment/worker-pl worker=ghcr.io/pawelkrupinski/movies-worker:<sha>
+ssh root@2.28.52.210 k3s kubectl -n kinowo rollout status deployment/worker-pl
+```
+
+Always pin the SHA. `latest` exists only so a hand-applied manifest resolves to something; a pod
+that restarts under `latest` can come back on a different build with nothing recording which.
+
+## Rolling back to Fly
+
+The Fly app `kinowo-worker` still exists with its secrets and its config. Rollback is
+`kubectl -n kinowo scale deployment/worker-pl --replicas=0` and then starting the Fly machine —
+in that order, because two workers would both project the read model and both hold change streams.
