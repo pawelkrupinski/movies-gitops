@@ -1,0 +1,63 @@
+# THE COUNTRY'S OWN VALUES.
+#
+# EVERY DOCUMENT CARRIES `namespace: kinowo` -- the base sets that namespace, so a patch without it
+# matches nothing and kustomize fails with "no resource matches strategic merge patch ... [noNs]",
+# which reads like the resource is missing rather than like the selector is under-specified.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-env
+  namespace: kinowo
+data:
+  # THE ONE VALUE THAT MAKES THIS THE POLAND SITE. It also selects the database (Country.mongoDb
+  # derives it) and the UI language. SINGULAR -- the worker's variable is KINOWO_COUNTRIES.
+  # Poland is Country.default, so this is technically redundant; it is set anyway so all three
+  # overlays read alike and nothing depends on the default staying Poland.
+  KINOWO_COUNTRY: "pl"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: kinowo
+spec:
+  # ONE REPLICA, like the other two, and the reason is monitoring rather than capacity.
+  #
+  # Prometheus scrapes this tier through the NodePort, because it runs OUTSIDE the cluster with no
+  # Kubernetes credentials and so cannot discover pods (see
+  # infra/nix/files/monitoring/scrape-kinowo-apps.yaml). A second replica behind one NodePort means
+  # kube-proxy picks a different pod per scrape, and the two pods have independent counters -- so
+  # every alert built on kinowo_web_movies_served would see phantom resets and half-values. A
+  # second pod would buy resilience against a JVM crash and nothing against losing the node (both
+  # would land on k3s-worker-1, the only schedulable one), which is not worth breaking the
+  # alerting that is supposed to notice the crash.
+  #
+  # Deploys are still gapless without it: maxUnavailable 0 / maxSurge 1 in the base means the
+  # replacement pod passes its readiness probe before the old one is terminated.
+  replicas: 1
+  template:
+    spec:
+      containers:
+        - name: web
+          resources:
+            requests:
+              cpu: "750m"
+              memory: 1Gi
+            limits:
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: kinowo
+spec:
+  ports:
+    - name: http
+      port: 9000
+      targetPort: http
+      # A FIXED PORT, because the host's Caddy vhost (infra/nix/hosts/k3s-worker-1) and
+      # infra/nix/files/monitoring/scrape-kinowo-apps.yaml both name it. An allocated one would
+      # change on re-create and take the public site down with it.
+      nodePort: 30910

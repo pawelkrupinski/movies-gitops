@@ -1,0 +1,20 @@
+# The United Kingdom web deployment -- uk.showtimes.cc, and the host Caddy also sends the bare showtimes.cc apex to.
+#
+# EVERYTHING ELSE COMES FROM ../../base. If you find yourself copying a field here that is not
+# genuinely country-specific, it belongs in the base instead.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: kinowo
+
+# web -> web-uk, web-env -> web-env-uk, and so on.
+nameSuffix: -uk
+
+# So `kubectl -n kinowo get pods -l country=uk` works, and so the three are distinguishable by
+# pod label as well as by name.
+labels:
+  - pairs:
+      country: uk
+    includeSelectors: true
+
+patches:
+  - path: patch.yaml

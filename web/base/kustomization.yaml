@@ -1,0 +1,7 @@
+# The shared base. Overlays add a nameSuffix, so one cluster runs web-pl, web-de and web-uk from
+# these same four objects.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: kinowo
+resources:
+  - all.yaml

@@ -1,0 +1,41 @@
+# THE COUNTRY'S OWN VALUES. See overlays/pl/patch.yaml for why every document repeats the namespace.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-env
+  namespace: kinowo
+data:
+  # Serves the German repertoire: German UI, the kinowo_de database, the German city list.
+  KINOWO_COUNTRY: "de"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: kinowo
+spec:
+  template:
+    spec:
+      containers:
+        - name: web
+          resources:
+            requests:
+              # Same reasoning as UK: half Poland's CPU, identical memory.
+              cpu: "500m"
+              memory: 1Gi
+            limits:
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: kinowo
+spec:
+  ports:
+    - name: http
+      port: 9000
+      targetPort: http
+      # Fixed -- named by the de.showtimes.cc Caddy vhost and by the Prometheus scrape config.
+      nodePort: 30911

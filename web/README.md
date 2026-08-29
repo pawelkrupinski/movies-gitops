@@ -1,0 +1,79 @@
+# The country web tier on k3s
+
+THREE deployments — `web-pl`, `web-de`, `web-uk` — built from one `base/` and three `overlays/`.
+They run the SAME image and differ in exactly three things: `KINOWO_COUNTRY`, the CPU request, and
+the NodePort. Anything else that differs between them is a bug in the split, not a feature of a
+country.
+
+`KINOWO_COUNTRY` is **singular** here. The worker's variable is `KINOWO_COUNTRIES` (plural), and
+they are not interchangeable — `Country.soleFromEnv` reads both precisely because getting this wrong
+hands the process the Poland default, which on this tier means an English-branded site serving
+Polish cinemas. It also selects the database, which is why **`MONGODB_DB` is never set**.
+
+## What makes this tier different from `../worker/`
+
+| | worker | web |
+| --- | --- | --- |
+| strategy | `Recreate` — two would double-write one corpus | `RollingUpdate`, `maxUnavailable: 0` |
+| readiness probe | none; nothing routes to it | required; it is what makes the rolling update honest |
+| storage | a 2Gi PVC (heap dumps, logs, AppCDS) | none; stateless |
+| public | no | yes — via Caddy on the node, see below |
+
+**One replica each, and that is a monitoring constraint rather than a capacity one.** Prometheus
+runs outside the cluster with no Kubernetes credentials, so it scrapes these through the NodePort; a
+second replica behind one NodePort would have kube-proxy alternate between two independent sets of
+counters, and every alert built on `kinowo_web_movies_served` would see phantom resets. Deploys are
+gapless without it — `maxUnavailable: 0` plus the readiness probe means the replacement pod serves
+before the old one is terminated.
+
+## How it becomes public
+
+Nothing in the cluster terminates TLS. `k3s` runs with traefik and servicelb disabled, and the
+public names are served by **Caddy on the k3s-worker-1 host itself**
+(`infra/nix/modules/roles/public-proxy.nix`, configured in `infra/nix/hosts/k3s-worker-1/`), which
+reverse-proxies each hostname to a NodePort on loopback:
+
+```
+kinowo.net           -> 127.0.0.1:30910   (web-pl)
+de.showtimes.cc      -> 127.0.0.1:30911   (web-de)
+uk.showtimes.cc      -> 127.0.0.1:30912   (web-uk)
+showtimes.cc         -> 127.0.0.1:30912   the brand front door — a country picker, not the UK site
+www.{kinowo.net,showtimes.cc}             301 to the bare name
+```
+
+The apex is not a fourth deployment. `models.Country.servesApex` makes any web process render a
+country picker when the request `Host` is the bare apex, so it is pointed at the UK pods only
+because the picker is English-language chrome.
+
+**The A records must exist before a deploy.** Caddy obtains certificates over ACME HTTP-01, so a
+name that does not yet resolve to `204.168.140.213` fails issuance and the browser gets a hard TLS
+error rather than a degraded page.
+
+## The two secrets, and why they are not in git
+
+```
+kinowo/web-secrets    Mongo, TMDB/OMDb, the OAuth client pairs, Sentry, the admin allowlist
+kinowo/ghcr-pull      a dockerconfigjson for ghcr.io, read:packages ONLY (shared with the worker)
+```
+
+Applied with `kubectl apply -f -` from a manifest built on the operator's machine out of the
+repo-root `.env.local`, piped over SSH rather than passed as arguments — an argv would put every
+value into the remote process list for as long as the command ran.
+
+## Deploying
+
+CI builds `ghcr.io/pawelkrupinski/movies-web:<sha>` (`.github/workflows/build-web-image.yaml`) and
+rolls it through the same forced-command endpoint the worker uses; the endpoint picks the
+Deployments from the repository name, so `movies-web` rolls these three and nothing else.
+
+```
+# CI does this automatically. By hand:
+ssh -i <k8sdeploy key> k8sdeploy@2.28.52.210 ghcr.io/pawelkrupinski/movies-web:<sha>
+
+# Structural changes (not just the image) go through the shared apply.sh, which preserves the
+# pinned image CI set:
+infra/kubernetes/apply.sh web all
+```
+
+Always pin the SHA. `latest` exists only so a hand-applied manifest resolves to something; a pod
+that restarts under `latest` can come back on a different build with nothing recording which.

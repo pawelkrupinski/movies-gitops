@@ -1,0 +1,123 @@
+# COUNTRY-AGNOSTIC BASE for the WEB (serving) tier. Everything here is true of the PL, DE and UK
+# web deployments alike; anything that differs lives in overlays/<country>/ and nowhere else.
+#
+# HOW THIS DIFFERS FROM THE WORKER, which is the sibling directory and otherwise the same shape:
+#
+#   KINOWO_COUNTRY    SINGULAR, not KINOWO_COUNTRIES. The two tiers name their country through
+#                     different variables (see Country.soleFromEnv) and getting this wrong hands
+#                     the process the Poland default -- an English site serving Polish cinemas.
+#   no PVC            web is stateless. The worker's /data holds heap dumps, logs and an AppCDS
+#                     archive; web keeps nothing across a restart.
+#   RollingUpdate     the worker is `Recreate` because two of them would double-write one corpus.
+#                     Web is read-only, so replicas are safe -- and this tier is the only thing
+#                     users see, so a deploy must never take it fully down. maxUnavailable: 0
+#                     means the new pod must pass its readiness probe BEFORE the old one goes.
+#   readinessProbe    the worker has none: nothing routes to it. Here it is what makes the
+#                     rolling update honest -- without it the Service starts sending traffic to a
+#                     JVM that is still building its MovieCache, which is a ~30s window of 503s.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kinowo
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-env
+  namespace: kinowo
+data:
+  PORT: '9000'
+  # Carried verbatim from fly.toml. G1 with a 384m heap is the known-good sizing: a pass at 192m
+  # OOM-crash-looped once the MovieCache grew past a few cities, and the repeated JVM cold-starts
+  # read as "high load" rather than as the OOM they were. Re-tuning it is a separate change from
+  # moving the process.
+  JAVA_OPTS: >-
+    -Xms384m -Xmx384m -XX:+UseG1GC -XX:MaxGCPauseMillis=50 -XX:+UseStringDeduplication -XX:ReservedCodeCacheSize=96m -XX:MaxMetaspaceSize=160m -XX:MaxDirectMemorySize=64m
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: kinowo
+  labels:
+    app: web
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      imagePullSecrets:
+      - name: ghcr-pull
+      nodeSelector:
+        kubernetes.io/hostname: k3s-worker-1
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: web
+        image: ghcr.io/pawelkrupinski/movies-web:latest
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - configMapRef:
+            name: web-env
+        - secretRef:
+            name: web-secrets
+        ports:
+        - name: http
+          containerPort: 9000
+        resources:
+          requests:
+            cpu: '500m'
+            memory: 1Gi
+          limits:
+            # Memory limit EQUALS the request (Guaranteed QoS) and there is deliberately NO CPU
+            # limit -- same reasoning as the worker: CFS quota stalls a JVM mid-GC far worse than
+            # the limit saves.
+            memory: 1Gi
+        # Boot is slow (Play start + the MovieCache rehydrate), so the slow start gets its own
+        # probe rather than a lenient liveness threshold that would also excuse a wedged process.
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+          periodSeconds: 10
+          failureThreshold: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 4
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: kinowo
+  labels:
+    app: web
+spec:
+  type: NodePort
+  selector:
+    app: web
+  ports:
+  - name: http
+    port: 9000
+    targetPort: http

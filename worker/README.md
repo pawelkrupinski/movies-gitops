@@ -9,8 +9,8 @@ in the split, not a feature of a country.
 **`MONGODB_DB` is never set anywhere** -- setting it would pin all three to one database and merge
 three corpora.
 
-**DE and UK keep their corpora fresh but nothing serves them.** `Country.webUrl` is `None` for both
-(undeployed since 2026-08-02), so a quiet DE or UK worker is not by itself a fault.
+All three corpora are served: the web tier runs beside these workers on the same cluster (see
+`../web/`), one deployment per country. A worker with no readers is no longer a normal state.
 
 `base/` + `overlays/` is the whole deployment. It carries no secrets: two are created out of band and
 are the only things standing between a fresh cluster and a running worker.
@@ -57,8 +57,9 @@ To roll a build out:
 # image reference -- there is no version of "deploy" that leaves two countries on an older build:
 ssh -i <k8sdeploy key> k8sdeploy@2.28.52.210 ghcr.io/pawelkrupinski/movies-worker:<sha>
 
-# Structural changes (not just the image) go through apply.sh, which preserves the pinned image:
-infra/kubernetes/worker/apply.sh all
+# Structural changes (not just the image) go through the shared apply.sh, which preserves the
+# pinned image. It takes the TIER first, because the web deployments use the same script:
+infra/kubernetes/apply.sh worker all
 ```
 
 Always pin the SHA. `latest` exists only so a hand-applied manifest resolves to something; a pod

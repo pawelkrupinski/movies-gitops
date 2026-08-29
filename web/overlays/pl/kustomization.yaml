@@ -1,0 +1,20 @@
+# The Poland web deployment -- kinowo.net.
+#
+# EVERYTHING ELSE COMES FROM ../../base. If you find yourself copying a field here that is not
+# genuinely country-specific, it belongs in the base instead.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: kinowo
+
+# web -> web-pl, web-env -> web-env-pl, and so on.
+nameSuffix: -pl
+
+# So `kubectl -n kinowo get pods -l country=pl` works, and so the three are distinguishable by
+# pod label as well as by name.
+labels:
+  - pairs:
+      country: pl
+    includeSelectors: true
+
+patches:
+  - path: patch.yaml

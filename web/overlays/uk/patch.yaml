@@ -1,0 +1,48 @@
+# THE COUNTRY'S OWN VALUES. See overlays/pl/patch.yaml for why every document repeats the namespace.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-env
+  namespace: kinowo
+data:
+  # Serves the UK repertoire: English UI, the kinowo_uk database, the UK city list, rendering the
+  # same `web` binary as the Polish site.
+  KINOWO_COUNTRY: "uk"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: kinowo
+spec:
+  template:
+    spec:
+      containers:
+        - name: web
+          resources:
+            requests:
+              # Half of Poland's. The UK MovieCache covers far fewer cities and the traffic is a
+              # fraction. Memory is kept at Poland's 1Gi deliberately rather than trimmed to match
+              # -- the heap sizing in the base is the one that was proven not to OOM, and
+              # rediscovering that limit on a live site is not worth the 256Mi.
+              cpu: "500m"
+              memory: 1Gi
+            limits:
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: kinowo
+spec:
+  ports:
+    - name: http
+      port: 9000
+      targetPort: http
+      # Fixed, and named twice on the host: once for uk.showtimes.cc and once for the bare
+      # showtimes.cc apex, which this deployment also answers (the country picker is chosen by
+      # request Host, so any deployment renders it -- the UK one is simply the English-language
+      # pick). See infra/nix/hosts/k3s-worker-1/default.nix.
+      nodePort: 30912
