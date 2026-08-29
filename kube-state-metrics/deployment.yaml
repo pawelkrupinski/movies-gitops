@@ -1,0 +1,196 @@
+# kube-state-metrics, and the NodePort that lets a Prometheus outside the cluster reach it.
+#
+# ------------------------------------------------------------------------------------------------
+# THE EXPOSURE DECISION, WHICH IS THE ONLY REAL DESIGN CHOICE IN THIS DIRECTORY
+# ------------------------------------------------------------------------------------------------
+#
+# Prometheus runs on monitoring-1, OUTSIDE the cluster, and holds no kubeconfig. That is not an
+# accident of ordering -- it is the arrangement this fleet wants. monitoring-1 is also the k3s
+# control plane, and roles/prometheus.nix already refuses to keep an org-wide Fly token on that host
+# for the same class of reason: the monitoring stack should not accumulate credentials that reach
+# past monitoring.
+#
+# So the usual answer -- `kubernetes_sd_configs`, service discovery against the apiserver -- is out.
+# It would mean giving Prometheus a token that can list every object in the cluster, in exchange for
+# discovering ONE endpoint that never moves. That is a bad trade at this size.
+#
+# THE THREE OPTIONS THAT REMAIN, AND WHY THIS ONE:
+#
+#   NodePort on a fixed port  <- chosen. kube-proxy publishes 30080 on every node; Prometheus
+#                                scrapes 10.20.0.12:30080. No credential, no proxy, no second
+#                                process. The port is a constant in two files (here and
+#                                `fleet.prometheus.kubeStateMetricsTargets`) and nothing can check
+#                                they agree -- a disagreement is a target that sits down.
+#
+#   hostNetwork + a bind on the private address
+#                                Narrower on paper: one listener on one address. But it pins the pod
+#                                to a node by more than scheduling, it takes a real port on the host
+#                                rather than one from the NodePort range, and it puts a
+#                                cluster-wide API reader on the host network. More coupling for the
+#                                same reachability.
+#
+#   An in-cluster Prometheus or an agent that remote-writes out
+#                                The correct answer for a bigger cluster and the wrong one here: a
+#                                second Prometheus to run, configure, alert on and keep in step with
+#                                the one that already exists, so that one exporter can be scraped.
+#
+# ------------------------------------------------------------------------------------------------
+# WHAT THE NodePort COSTS, STATED PLAINLY BECAUSE IT IS NOT WHAT IT LOOKS LIKE
+# ------------------------------------------------------------------------------------------------
+#
+# A NodePort listens on EVERY node and on every address kube-proxy's rules cover, including the
+# public NIC. And -- this is the part that surprises people -- the in-host firewall does NOT filter
+# it. NodePort traffic is DNATed in `nat PREROUTING` and then traverses FORWARD on its way to the
+# pod; it never reaches the INPUT chain, which is the only chain
+# infra/nix/modules/fleet/firewall.nix writes rules in. modules/fleet/firewall.nix says exactly this
+# in its header, about the day k3s does anything: this is that day.
+#
+# WHAT IS ACTUALLY KEEPING 30080 OFF THE INTERNET is therefore Hetzner's edge firewall
+# (infra/terraform/firewall.tf), which is deny-by-default and names only 22, 80, 443 and icmp
+# inbound. That is a real defence and it is attached to all three servers with a plan check that
+# refuses to leave one out -- but it is ONE layer where this fleet's convention is two, and pretending
+# otherwise would be the wrong note to end on. THE TIGHTENING, if it is ever wanted, is
+# `--kube-proxy-arg=nodeport-addresses=10.20.0.0/24` on the k3s agent, which makes kube-proxy
+# publish NodePorts on the private subnet only. That belongs in
+# infra/nix/modules/roles/k3s-agent.nix, not here.
+#
+# ALSO NOTE: 30080 must be reachable from monitoring-1 across the private subnet. Because the packet
+# never reaches INPUT, no rule in fleet/firewall.nix is required for that to work -- which is
+# convenient and is exactly the same fact as the paragraph above, read from the other side.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kube-state-metrics
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: kube-state-metrics
+spec:
+  # ONE REPLICA, AND A SECOND WOULD BE ACTIVELY WRONG. kube-state-metrics has no sharding here and
+  # no leader election; two replicas behind one Service would each hold a full watch on the API and
+  # answer alternate scrapes with their own view, so a rule reading `kube_deployment_status_replicas_ready`
+  # would see it flap between two copies that are momentarily out of step. Availability of a metrics
+  # exporter is what `TargetDown` is for.
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kube-state-metrics
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kube-state-metrics
+    spec:
+      serviceAccountName: kube-state-metrics
+      # NO nodeSelector AND NO TOLERATION, deliberately, and the two together are what places this.
+      # monitoring-1 carries a NoSchedule taint as the control plane, so with no toleration this can
+      # only land on k3s-worker-1 -- which is where `fleet.prometheus.kubeStateMetricsTargets` points.
+      # It is placed by the cluster's own rules rather than pinned by a hostname, so if a second
+      # worker is ever added this still schedules; the NodePort means the scrape address keeps
+      # working wherever it lands.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: kube-state-metrics
+          # PINNED, NEVER `latest`. A metrics exporter that changes metric NAMES across a version is
+          # the specific hazard: `kube_deployment_status_replicas_ready` disappearing under a rule
+          # that reads it produces no error and no alert, only silence -- which is the failure mode
+          # k3s.rules' header is written against. The `absent()` companions in that file are the
+          # backstop; the pin is the prevention.
+          #
+          # BUMPING IT is a deliberate act: read the release notes for renamed or removed series,
+          # then `kubectl -n monitoring set image deployment/kube-state-metrics kube-state-metrics=...`
+          # and re-check the rules that read them.
+          image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.14.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - --port=8080
+            - --telemetry-port=8081
+            # EXPLICIT, AND IT MUST MATCH THE ClusterRole IN rbac.yaml. Left at the default, this
+            # collects roughly thirty resource kinds -- including Secrets and ConfigMaps, which this
+            # cluster deliberately does not grant. The result would be a reflector erroring in a log
+            # nobody reads while the rest of the metrics look fine. Naming the list here means the
+            # grant and the collection are one decision written twice, on purpose, in two files that
+            # sit beside each other.
+            - --resources=nodes,pods,deployments,replicasets,daemonsets,statefulsets,namespaces,jobs,cronjobs,persistentvolumeclaims
+          ports:
+            - name: http-metrics
+              containerPort: 8080
+            - name: telemetry
+              containerPort: 8081
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              # NO CPU LIMIT, for the same reason the worker Deployment gives: a CPU limit is a CFS
+              # quota, and throttling a process in fixed slices costs more than the limit saves on a
+              # node with nothing else contending for its eight cores.
+              #
+              # THE MEMORY LIMIT IS DELIBERATELY ABOVE THE REQUEST, unlike the worker's -- which sets
+              # them equal to buy Guaranteed QoS. kube-state-metrics holds every watched object in
+              # memory, so its footprint grows with the cluster rather than sitting at a measured
+              # constant. Equal values would turn "somebody deployed forty pods" into an OOM kill.
+              #
+              # 192Mi IS A GUESS. Reasoning: this cluster holds a few dozen objects across the
+              # granted kinds and upstream's own example asks for 250Mi against far larger ones, so
+              # this is generous by a wide margin and still small enough to notice if it is ever
+              # approached. Revise it from `container_memory_working_set_bytes` after a month, not
+              # because it was hit once. NOTE the loop it closes: this limit is one of the things
+              # that can produce the OOMKilled event `K3sContainerOOMKilled` alerts on.
+              memory: 192Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          # UPSTREAM'S PROBE SPLIT, KEPT AS IT IS BECAUSE THE ASYMMETRY IS THE POINT. `/livez` on the
+          # metrics port says the process is alive; `/readyz` on the TELEMETRY port says its
+          # reflectors have finished their initial list. Reading readiness off the metrics port would
+          # declare the pod ready while it still had an empty view of the cluster -- so Prometheus
+          # would scrape zeroes, and `K3sDeploymentReplicasMissing` would fire on a Deployment that
+          # is perfectly healthy, every time this pod restarts.
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: http-metrics
+            initialDelaySeconds: 5
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: telemetry
+            initialDelaySeconds: 5
+            timeoutSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-state-metrics
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: kube-state-metrics
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: kube-state-metrics
+  ports:
+    # THE ONLY PORT PUBLISHED OUTSIDE THE CLUSTER. 30080 is fixed rather than allocated, because the
+    # scrape target on monitoring-1 is a literal address:port and an allocated port would change on
+    # every re-apply. It has to agree with `fleet.prometheus.kubeStateMetricsTargets` in
+    # infra/nix/modules/roles/prometheus.nix; nothing checks that, and the symptom of a disagreement
+    # is `TargetDown{job="kube-state-metrics"}`, which reads as the exporter being broken.
+    - name: http-metrics
+      port: 8080
+      targetPort: http-metrics
+      nodePort: 30080
+    # TELEMETRY IS NOT EXPOSED. It is kube-state-metrics reporting on ITSELF -- watch errors, request
+    # durations -- which is genuinely useful and is not worth a second port published on every node's
+    # public NIC to get. `up{job="kube-state-metrics"}` already distinguishes "not answering" from
+    # "answering", and the `absent()` rules in k3s.rules cover the case where it answers with an
+    # empty view. If the self-metrics are ever wanted, the right way in is an in-cluster scraper, not
+    # a second NodePort.

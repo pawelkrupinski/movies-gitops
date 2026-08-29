@@ -1,0 +1,121 @@
+# kube-state-metrics' identity and the exact set of objects it may read.
+#
+# WHAT kube-state-metrics IS, IN ONE SENTENCE: it watches the Kubernetes API and turns the state of
+# objects into metrics -- `kube_node_status_condition`, `kube_deployment_status_replicas_ready`,
+# `kube_pod_container_status_waiting_reason`. Nothing else on this fleet can answer those. k3s.rules
+# spent its whole header saying so: node_exporter's systemd collector can see whether `k3s.service`
+# is running and nothing at all about whether a node is Ready, whether a Deployment has its
+# replicas, or whether a pod is crash-looping. Those are the first three questions anybody asks.
+#
+# ------------------------------------------------------------------------------------------------
+# THE PERMISSION IS THE INTERESTING PART OF THIS FILE, NOT THE DEPLOYMENT
+# ------------------------------------------------------------------------------------------------
+#
+# kube-state-metrics is a cluster-wide READER by construction: to report on every namespace it must
+# be allowed to list every namespace. That is a genuine grant and it is worth spending a paragraph
+# on rather than pasting upstream's manifest.
+#
+# UPSTREAM'S ClusterRole INCLUDES `secrets` AND `configmaps`. It uses them for `kube_secret_info`
+# and `kube_configmap_info` -- metadata only, names and creation timestamps, never values. This
+# cluster is not going to have that grant anyway. `kinowo/worker-pl-secrets` holds the production
+# Mongo credential, every scraper API key and the Telegram bot token, and `kinowo/ghcr-pull` holds a
+# registry credential; a compromise of a metrics exporter should not be a step towards any of them,
+# and the metrics it would buy are ones nothing here reads. The same reasoning keeps
+# `fleet.prometheus.scrapeFly` switched off on monitoring-1: nothing in this cluster holds a
+# credential that reaches further than it needs to.
+#
+# THE GRANT AND THE `--resources` FLAG MUST AGREE, and they are written to. The Deployment passes an
+# explicit `--resources=` list rather than accepting the default set, so that this ClusterRole and
+# that flag name the same objects. Get it wrong in one direction and kube-state-metrics logs a
+# permission error per reflector and publishes a partial view; get it wrong in the other and the
+# grant is wider than anything uses. Neither shows up in an alert, which is why they are paired
+# here in a comment as well as in the two files.
+#
+# LIST AND WATCH, NEVER GET. A `get` on a named object is not something a reflector does, and
+# leaving it out means this identity cannot be used to fetch one object by name even if something
+# else were tricked into using it.
+---
+# ITS OWN NAMESPACE, NOT `kinowo`. The application namespace holds the worker and its two secrets;
+# putting a cluster-wide reader beside them means any namespace-scoped role binding that gets added
+# to `kinowo` later has to be reasoned about with this identity in mind. `monitoring` also says what
+# the thing is for, which is what a namespace is worth.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    app.kubernetes.io/part-of: kinowo-monitoring
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kube-state-metrics
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: kube-state-metrics
+# NO API TOKEN MOUNTED AUTOMATICALLY BEYOND THE ONE IT USES. Left at the default rather than set to
+# false: kube-state-metrics IS an API client and needs its projected token. Said out loud because
+# `automountServiceAccountToken: false` is the right default for almost every other workload on this
+# cluster, including the worker, and its absence here is a decision rather than an omission.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-state-metrics
+  labels:
+    app.kubernetes.io/name: kube-state-metrics
+rules:
+  # `nodes` is what `K3sNodeNotReady` reads, and it is the one grant here that could not be narrowed
+  # even in principle -- node conditions are cluster-scoped objects.
+  - apiGroups: [""]
+    resources:
+      - nodes
+      - pods
+      - namespaces
+      - persistentvolumeclaims
+    verbs: ["list", "watch"]
+
+  # `deployments` gives `kube_deployment_spec_replicas` and `kube_deployment_status_replicas_ready`,
+  # the pair `K3sDeploymentReplicasMissing` compares. The other three are here because a workload
+  # that is not a Deployment fails the same way and nobody wants to discover the gap during the
+  # incident: local-path storage already pins the worker to one node, and a DaemonSet or StatefulSet
+  # is the obvious next shape anything scheduled here takes.
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+      - replicasets
+      - daemonsets
+      - statefulsets
+    verbs: ["list", "watch"]
+
+  # Nothing runs as a Job on this cluster today. Granted anyway because a CronJob that silently
+  # stops is the same class of failure as `nixos-deploy.rules` exists for, and adding the grant
+  # later means editing RBAC during the change that needs it.
+  - apiGroups: ["batch"]
+    resources:
+      - jobs
+      - cronjobs
+    verbs: ["list", "watch"]
+
+  # DELIBERATELY ABSENT, so their absence does not read as an oversight: `secrets`, `configmaps`,
+  # `services`, `endpoints`, `ingresses`, `networkpolicies`, `resourcequotas`, `storageclasses`,
+  # `volumeattachments`, `certificatesigningrequests`, `mutatingwebhookconfigurations`. Upstream's
+  # standard ClusterRole grants all of them. Every one produces metrics nothing on this fleet reads,
+  # and the first two are the ones this cluster most needs a metrics exporter not to be able to
+  # enumerate. Add one when a rule needs it, in the same commit as the rule and the `--resources`
+  # entry.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-state-metrics
+  labels:
+    app.kubernetes.io/name: kube-state-metrics
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-state-metrics
+subjects:
+  - kind: ServiceAccount
+    name: kube-state-metrics
+    namespace: monitoring

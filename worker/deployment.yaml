@@ -124,9 +124,13 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: worker
-          # Replaced per deploy by `kubectl set image`. `latest` is here only so a hand-applied
-          # manifest resolves to something; CI always pins the commit SHA, because `latest` gives a
-          # restarted pod a different build from the one that was deployed with no record of either.
+          # A PLACEHOLDER, NOT A VALUE. CI pins a commit SHA with `kubectl set image`, and a plain
+          # `kubectl apply` of this file writes THIS line back over it -- silently reverting
+          # production to whatever `latest` points at, with no error and no record of which build.
+          # That happened on 2026-08-29.
+          #
+          # Apply this file with infra/kubernetes/worker/apply.sh, which reads the running image
+          # first and puts it back afterwards. Never `kubectl apply -f deployment.yaml` directly.
           image: ghcr.io/pawelkrupinski/movies-worker:latest
           imagePullPolicy: IfNotPresent
           envFrom:
@@ -176,8 +180,24 @@ spec:
           persistentVolumeClaim:
             claimName: worker-pl-data
 ---
-# Exists ONLY so Prometheus has a stable name to scrape /metrics on. There is no ingress and nothing
-# outside the cluster talks to the worker; ClusterIP with no external exposure is the whole surface.
+# HOW PROMETHEUS REACHES THE WORKER'S /metrics, and why it is a NodePort rather than the headless
+# ClusterIP this started as.
+#
+# Prometheus runs on monitoring-1, OUTSIDE the cluster, and has no Kubernetes credentials at all --
+# deliberately, because the only credential k3s issues is cluster-admin. So it cannot use
+# `kubernetes_sd_configs` to discover the pod, and it cannot resolve a ClusterIP or a headless
+# Service name: both only mean anything to something using the cluster's DNS.
+#
+# It COULD scrape the pod IP directly -- monitoring-1 is the k3s server, so flannel routes it to
+# 10.42.x -- but a pod IP changes on every restart, and a scrape target that goes stale on a routine
+# rollout is a target that reads as "worker down" every time the worker is redeployed.
+#
+# A NodePort is the stable address: a fixed port on the node, scraped as 10.20.0.12:30900 over the
+# private subnet. NOT public -- the Hetzner edge firewall drops everything except 22, 80 and 443, so
+# this port exists only on the private interface as far as anything outside is concerned.
+#
+# 30900 is a literal from the NodePort range (30000-32767) rather than an allocated one, because
+# prometheus.yaml has to name it and an allocated port would change under it on re-create.
 apiVersion: v1
 kind: Service
 metadata:
@@ -186,10 +206,11 @@ metadata:
   labels:
     app: worker-pl
 spec:
-  clusterIP: None
+  type: NodePort
   selector:
     app: worker-pl
   ports:
     - name: health
       port: 9000
       targetPort: health
+      nodePort: 30900
