@@ -1,0 +1,7 @@
+# The shared base. Overlays add a nameSuffix, so one cluster runs worker-pl, worker-de and
+# worker-uk from these same five objects.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: kinowo
+resources:
+  - all.yaml

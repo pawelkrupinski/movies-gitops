@@ -1,12 +1,25 @@
-# The PL worker on k3s
+# The country workers on k3s
 
-`deployment.yaml` is the whole deployment. It carries no secrets: two are created out of band and
+THREE deployments -- `worker-pl`, `worker-de`, `worker-uk` -- built from one `base/` and three
+`overlays/`. They run the SAME image and differ in exactly four things: `KINOWO_COUNTRIES`, the two
+scrape-rate levers, the JVM heap, and the NodePort. Anything else that differs between them is a bug
+in the split, not a feature of a country.
+
+`KINOWO_COUNTRIES` also picks the DATABASE (`Country.mongoDb` derives it), which is why
+**`MONGODB_DB` is never set anywhere** -- setting it would pin all three to one database and merge
+three corpora.
+
+**DE and UK keep their corpora fresh but nothing serves them.** `Country.webUrl` is `None` for both
+(undeployed since 2026-08-02), so a quiet DE or UK worker is not by itself a fault.
+
+`base/` + `overlays/` is the whole deployment. It carries no secrets: two are created out of band and
 are the only things standing between a fresh cluster and a running worker.
 
 ## The two secrets, and why they are not in git
 
 ```
-kinowo/worker-pl-secrets   the worker's own credentials (Mongo, TMDB, OMDb, Zyte, Telegram,
+kinowo/worker-secrets      credentials, SHARED by all three (identical: one Mongo user
+                           with readWrite on all three databases, one TMDB/OMDb/Zyte key set) (Mongo, TMDB, OMDb, Zyte, Telegram,
                            the Decodo proxy, Sentry)
 kinowo/ghcr-pull           a dockerconfigjson for ghcr.io, read:packages ONLY
 ```
@@ -40,8 +53,12 @@ CI builds `ghcr.io/pawelkrupinski/movies-worker:<sha>` (`.github/workflows/build
 To roll a build out:
 
 ```
-ssh root@2.28.52.210 k3s kubectl -n kinowo set image deployment/worker-pl worker=ghcr.io/pawelkrupinski/movies-worker:<sha>
-ssh root@2.28.52.210 k3s kubectl -n kinowo rollout status deployment/worker-pl
+# CI does this automatically. By hand, the forced-command endpoint rolls ALL THREE from one
+# image reference -- there is no version of "deploy" that leaves two countries on an older build:
+ssh -i <k8sdeploy key> k8sdeploy@2.28.52.210 ghcr.io/pawelkrupinski/movies-worker:<sha>
+
+# Structural changes (not just the image) go through apply.sh, which preserves the pinned image:
+infra/kubernetes/worker/apply.sh all
 ```
 
 Always pin the SHA. `latest` exists only so a hand-applied manifest resolves to something; a pod
@@ -50,5 +67,5 @@ that restarts under `latest` can come back on a different build with nothing rec
 ## Rolling back to Fly
 
 The Fly app `kinowo-worker` still exists with its secrets and its config. Rollback is
-`kubectl -n kinowo scale deployment/worker-pl --replicas=0` and then starting the Fly machine —
+`kubectl -n kinowo scale deployment/worker-pl --replicas=0` (and worker-de / worker-uk) and then starting the Fly machine —
 in that order, because two workers would both project the read model and both hold change streams.

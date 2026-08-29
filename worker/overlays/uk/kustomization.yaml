@@ -1,0 +1,27 @@
+# The United Kingdom worker.
+#
+# TASKS_PER_VENUE IS 36, far above PL's default and DE's 14. The UK corpus is many venues
+# with small rosters, so the work per venue is smaller and more of it can be in flight.
+#
+# EVERYTHING ELSE COMES FROM ../../base. If you find yourself copying a field here that is not
+# genuinely country-specific, it belongs in the base instead -- three near-identical overlays that
+# drift apart is exactly what the base exists to prevent.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: kinowo
+
+resources:
+  - ../../base
+
+# worker -> worker-uk, worker-env -> worker-env-uk, and so on for all five objects.
+nameSuffix: -uk
+
+# So `kubectl -n kinowo get pods -l country=uk` works, and so Prometheus can tell the three apart
+# from the pod labels if it ever discovers them rather than being told.
+labels:
+  - pairs:
+      country: uk
+    includeSelectors: true
+
+patches:
+  - path: patch.yaml

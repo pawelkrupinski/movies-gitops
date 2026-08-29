@@ -1,0 +1,28 @@
+# The Germany worker.
+#
+# A LARGER HEAP THAN THE OTHER TWO (640m, and 1.5Gi for the pod). Carried from Fly, where
+# the German roster needed it; the note there records this as a bump made after the smaller
+# heap proved tight, not a guess.
+#
+# EVERYTHING ELSE COMES FROM ../../base. If you find yourself copying a field here that is not
+# genuinely country-specific, it belongs in the base instead -- three near-identical overlays that
+# drift apart is exactly what the base exists to prevent.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: kinowo
+
+resources:
+  - ../../base
+
+# worker -> worker-de, worker-env -> worker-env-de, and so on for all five objects.
+nameSuffix: -de
+
+# So `kubectl -n kinowo get pods -l country=de` works, and so Prometheus can tell the three apart
+# from the pod labels if it ever discovers them rather than being told.
+labels:
+  - pairs:
+      country: de
+    includeSelectors: true
+
+patches:
+  - path: patch.yaml

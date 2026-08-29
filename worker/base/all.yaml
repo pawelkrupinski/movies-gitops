@@ -1,0 +1,124 @@
+# COUNTRY-AGNOSTIC BASE. Everything here is true of the PL, DE and UK workers alike; anything
+# that differs between them lives in overlays/<country>/ and nowhere else.
+#
+# WHAT DELIBERATELY IS NOT HERE, because getting it wrong merges three corpora into one:
+#
+#   KINOWO_COUNTRIES  the ONE value that distinguishes the three, and also what picks the
+#                     database -- Country.mongoDb derives the name from the country. Which is
+#                     why MONGODB_DB IS NEVER SET ANYWHERE, in the base or an overlay: setting
+#                     it would pin every country to a single database.
+#   the scrape levers KINOWO_SCRAPE_FRESHNESS_MINUTES and KINOWO_SCRAPE_TASKS_PER_VENUE are the
+#                     dominant write-rate controls and the three corpora are not alike. The
+#                     values in the overlays are carried from the Fly deployment, where they
+#                     were arrived at against real load rather than guessed.
+#   JAVA_OPTS         DE runs a 640m heap against PL and UK's 448m, for a larger corpus.
+#   nodePort          one fixed port each, because prometheus.yaml names them.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kinowo
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: worker-env
+  namespace: kinowo
+data:
+  PORT: '9000'
+  KINOWO_BOOT_HYDRATE_MAX_ATTEMPTS: '20'
+  KINOWO_WORKER_POOL_SIZE: '4'
+  MALLOC_ARENA_MAX: '2'
+  MALLOC_TRIM_THRESHOLD_: '131072'
+  KINOWO_LOG_DIR: /data/logs
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: worker-data
+  namespace: kinowo
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: kinowo
+  labels:
+    app: worker
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      imagePullSecrets:
+      - name: ghcr-pull
+      nodeSelector:
+        kubernetes.io/hostname: k3s-worker-1
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: worker
+        image: ghcr.io/pawelkrupinski/movies-worker:latest
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - configMapRef:
+            name: worker-env
+        - secretRef:
+            name: worker-secrets
+        ports:
+        - name: health
+          containerPort: 9000
+        resources:
+          requests:
+            cpu: '1'
+            memory: 1Gi
+          limits:
+            memory: 1Gi
+        startupProbe:
+          httpGet:
+            path: /health
+            port: health
+          periodSeconds: 10
+          failureThreshold: 30
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: health
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 4
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: worker-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker
+  namespace: kinowo
+  labels:
+    app: worker
+spec:
+  type: NodePort
+  selector:
+    app: worker
+  ports:
+  - name: health
+    port: 9000
+    targetPort: health

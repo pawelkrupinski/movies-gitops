@@ -1,0 +1,26 @@
+# The Poland worker.
+#
+# The original, and the only one whose data anything currently serves.
+#
+# EVERYTHING ELSE COMES FROM ../../base. If you find yourself copying a field here that is not
+# genuinely country-specific, it belongs in the base instead -- three near-identical overlays that
+# drift apart is exactly what the base exists to prevent.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: kinowo
+
+resources:
+  - ../../base
+
+# worker -> worker-pl, worker-env -> worker-env-pl, and so on for all five objects.
+nameSuffix: -pl
+
+# So `kubectl -n kinowo get pods -l country=pl` works, and so Prometheus can tell the three apart
+# from the pod labels if it ever discovers them rather than being told.
+labels:
+  - pairs:
+      country: pl
+    includeSelectors: true
+
+patches:
+  - path: patch.yaml

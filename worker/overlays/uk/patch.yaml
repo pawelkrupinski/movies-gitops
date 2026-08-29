@@ -1,0 +1,62 @@
+# THE COUNTRY'S OWN VALUES. Four things differ between the three workers and they are all here.
+#
+# EVERY DOCUMENT CARRIES `namespace: kinowo`, and it is not decoration: the base sets that
+# namespace, so a patch without it matches nothing and kustomize fails with
+# "no resource matches strategic merge patch ... [noNs]" -- which reads like the resource is
+# missing rather than like the selector is under-specified.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: worker-env
+  namespace: kinowo
+data:
+  # THE ONE VALUE THAT MAKES THIS THE UNITED KINGDOM WORKER, and also what selects the
+  # database: Country.mongoDb derives it from the country, so this alone sends writes to the right
+  # corpus. MONGODB_DB is never set -- it would override that and merge all three.
+  KINOWO_COUNTRIES: "uk"
+
+  # The dominant write-rate lever: how stale a cinema's scrape may get before it is re-scraped.
+  KINOWO_SCRAPE_TASKS_PER_VENUE: "36"
+  KINOWO_SCRAPE_FRESHNESS_MINUTES: "420"
+
+  # Identical to the other countries except the heap. Carried from Fly verbatim: SerialGC and a
+  # small pinned heap were the fix for an OOM-restart loop under G1, and re-tuning them is a
+  # separate change from moving the process.
+  JAVA_OPTS: >-
+    -Xms448m -Xmx448m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:+AutoCreateSharedArchive -XX:SharedArchiveFile=/data/app.jsa -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: kinowo
+spec:
+  template:
+    spec:
+      containers:
+        - name: worker
+          resources:
+            requests:
+              cpu: "1"
+              memory: 1Gi
+            limits:
+              # Memory limit EQUALS the request (Guaranteed QoS, so the kubelet does not evict this
+              # ahead of anything else) and there is deliberately NO CPU limit: a CPU limit is CFS
+              # quota, and a JVM whose GC or JIT threads are suspended mid-slice stalls far worse
+              # than the limit saves.
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker
+  namespace: kinowo
+spec:
+  ports:
+    - name: health
+      port: 9000
+      targetPort: health
+      # A FIXED PORT, because infra/nix/files/monitoring/scrape-kinowo-apps.yaml names it. An
+      # allocated one would change on re-create and the scrape would silently go stale.
+      nodePort: 30902
