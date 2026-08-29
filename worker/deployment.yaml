@@ -1,0 +1,186 @@
+# The PL scraping worker, moved off Fly.io.
+#
+# WHY THIS BELONGS ON THE CLUSTER AND THE WEB TIER DOES NOT: the worker's whole job is talking to
+# MongoDB and to cinema sites. On Fly it reached the database through the WireGuard tunnel into
+# 6PN; here it reaches 10.20.0.10 directly over the Hetzner private subnet -- no tunnel, no
+# encryption overhead, and one fewer single point of failure between the two processes that talk
+# most. The web tier stays on Fly because kinowo.fly.dev is Fly's own domain and the shipped iOS and
+# Android apps bind Universal Links to that exact host.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kinowo
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: worker-pl-env
+  namespace: kinowo
+data:
+  # WHICH COUNTRY THIS PROCESS RUNS, and the only thing distinguishing it from the DE and UK
+  # workers. It is also what picks the database: Country.mongoDb derives the name from the country,
+  # so MONGODB_DB IS DELIBERATELY NOT SET HERE -- setting it would pin every country to one database.
+  KINOWO_COUNTRIES: "pl"
+
+  # The health/metrics listener. Not ingress: nothing outside the cluster talks to this pod.
+  PORT: "9000"
+
+  KINOWO_BOOT_HYDRATE_MAX_ATTEMPTS: "20"
+
+  # Task-worker threads. Left at Fly's 4 ON PURPOSE even though this node has 8 cores and Fly gave
+  # it 2 shared ones. The migration is the change; retuning throughput is a separate one with its
+  # own evidence, and raising both the machine and the concurrency at once would make a regression
+  # impossible to attribute. There is real headroom here to claim later.
+  KINOWO_WORKER_POOL_SIZE: "4"
+
+  # How stale a cinema's scrape may get before it is re-scraped. The dominant write-rate lever.
+  KINOWO_SCRAPE_FRESHNESS_MINUTES: "60"
+
+  # glibc native-footprint caps, carried over from Fly. They bound arena growth in a JVM that does a
+  # lot of concurrent HTTP, and they cost nothing here.
+  MALLOC_ARENA_MAX: "2"
+  MALLOC_TRIM_THRESHOLD_: "131072"
+
+  KINOWO_LOG_DIR: "/data/logs"
+
+  # THE JVM, CARRIED OVER FROM FLY VERBATIM, AND THAT IS A DELIBERATE NON-DECISION.
+  #
+  # These settings are not a considered fit for this node -- they are a squeeze into Fly's 1GB
+  # machine. SerialGC and a 448m heap were the fix for a documented OOM-restart loop every 1-5h
+  # under G1 (fly.worker.toml records it). This node has 16GB and 8 cores, so the constraint that
+  # produced them is gone and there is throughput being left on the table.
+  #
+  # THEY ARE KEPT ANYWAY FOR THE FIRST DEPLOYMENT. Moving the process and re-tuning its garbage
+  # collector in one step means any regression has two candidate causes and no clean way to tell
+  # them apart. Raise the heap and revisit G1 as its own change, once this is known good -- the
+  # memory limit below already leaves room for it.
+  JAVA_OPTS: >-
+    -Xms448m -Xmx448m -XX:+UseSerialGC
+    -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m
+    -XX:CICompilerCount=2 -XX:-UseTypeSpeculation
+    -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20
+    -XX:+AutoCreateSharedArchive -XX:SharedArchiveFile=/data/app.jsa
+    -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics
+    -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps
+    -XX:ErrorFile=/data/logs/hs_err_%p.log
+    -Djdk.http.auth.tunneling.disabledSchemes=
+---
+# Heap dumps, hs_err logs and the CDS archive. A PVC rather than an emptyDir because the whole point
+# of -XX:+HeapDumpOnOutOfMemoryError is to still have the dump AFTER the restart that the OOM caused;
+# an emptyDir is deleted with the pod, so the evidence would go exactly when it was needed.
+#
+# k3s ships local-path as the default StorageClass, so this binds to a directory on the node. That
+# pins the pod to k3s-worker-1, which is already true -- it is the only schedulable node.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: worker-pl-data
+  namespace: kinowo
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-pl
+  namespace: kinowo
+spec:
+  # ONE REPLICA, AND MORE WOULD NOT HELP. The work itself is cluster-safe -- TaskWorker claims each
+  # task atomically in Mongo and every reaper gates its tick on a ScheduledRunStore occurrence claim
+  # -- so a second replica would not double-scrape. It would simply do nothing useful: MovieCache
+  # and ReadModelProjector each open their own change-stream cursor per process and re-project every
+  # write, a fixed per-process cost that does not shard. A second Fly machine measured zero extra
+  # throughput. Scale by COUNTRY, not by replica.
+  replicas: 1
+  strategy:
+    # Recreate, not RollingUpdate. With replicas: 1 a rolling update briefly runs two workers, which
+    # buys nothing (see above) and doubles the change-stream and projection load on mongo-1 during
+    # every deploy. A few seconds of no worker is invisible: the read model keeps serving.
+    type: Recreate
+  selector:
+    matchLabels:
+      app: worker-pl
+  template:
+    metadata:
+      labels:
+        app: worker-pl
+    spec:
+      # The pod holds a PVC bound by local-path to a node directory, so it cannot move anyway; this
+      # says so explicitly rather than leaving it as an emergent property of the storage class.
+      nodeSelector:
+        kubernetes.io/hostname: k3s-worker-1
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: worker
+          # Replaced per deploy by `kubectl set image`. `latest` is here only so a hand-applied
+          # manifest resolves to something; CI always pins the commit SHA, because `latest` gives a
+          # restarted pod a different build from the one that was deployed with no record of either.
+          image: ghcr.io/pawelkrupinski/movies-worker:latest
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: worker-pl-env
+            - secretRef:
+                name: worker-pl-secrets
+          ports:
+            - name: health
+              containerPort: 9000
+          resources:
+            requests:
+              cpu: "1"
+              memory: 1Gi
+            limits:
+              # NO CPU LIMIT, DELIBERATELY. A CPU limit is enforced by CFS quota, which throttles the
+              # process in fixed periods -- and a JVM whose GC or JIT threads are suspended mid-slice
+              # stalls far worse than the limit ever saves. There is nothing to protect here anyway:
+              # this pod is alone on an 8-core node. The `requests` above is what guarantees it a
+              # share if that ever stops being true.
+              #
+              # Memory limit EQUALS the request, which puts the pod in Guaranteed QoS so the kubelet
+              # will not evict it under node pressure ahead of anything else. 1Gi against a ~890MB
+              # measured footprint on Fly is the same headroom it had there.
+              memory: 1Gi
+          # THE WORKER'S OWN HEALTH ENDPOINT, WHICH IS UP BEFORE ITS WIRING IS. That is why it is a
+          # LIVENESS signal and not a readiness one: it answers 200 while Mongo is still hydrating,
+          # so treating it as readiness would declare the pod ready before it can do anything.
+          #
+          # A generous startupProbe covers the hydrate, and only after it passes does liveness begin.
+          # Without it a slow boot -- a cold Mongo, a large read model -- would be killed as unhealthy
+          # and restarted into the same slow boot, for ever.
+          startupProbe:
+            httpGet: { path: /health, port: health }
+            periodSeconds: 10
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: { path: /health, port: health }
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 4
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: worker-pl-data
+---
+# Exists ONLY so Prometheus has a stable name to scrape /metrics on. There is no ingress and nothing
+# outside the cluster talks to the worker; ClusterIP with no external exposure is the whole surface.
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker-pl
+  namespace: kinowo
+  labels:
+    app: worker-pl
+spec:
+  clusterIP: None
+  selector:
+    app: worker-pl
+  ports:
+    - name: health
+      port: 9000
+      targetPort: health
