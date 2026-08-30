@@ -10,8 +10,8 @@
 # So every manifest's `image:` is a PLACEHOLDER and this is the only supported way to apply one: read
 # the image the Deployment is running, apply, put it back. Structural changes land; the pin survives.
 #
-# ONE SCRIPT FOR BOTH TIERS. `worker` and `web` are the same shape -- a base plus three country
-# overlays, a Deployment named `<tier>-<cc>` whose container is named `<tier>` -- so the tier is an
+# ONE SCRIPT FOR BOTH TIERS. `worker` and `web` are the same shape -- a base plus one overlay per
+# country, a Deployment named `<tier>-<cc>` whose container is named `<tier>` -- so the tier is an
 # argument rather than a second copy of this file to keep in step.
 #
 #   infra/kubernetes/apply.sh web pl                     # keep the running image
@@ -23,10 +23,10 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ssh_target="${KINOWO_K3S_SSH:-root@2.28.52.210}"
 kubectl=(ssh -o BatchMode=yes "$ssh_target" -- k3s kubectl)
 
-COUNTRIES=(pl de uk)
+COUNTRIES=(pl de uk us)
 TIERS=(worker web)
 
-usage() { echo "usage: apply.sh <worker|web> <pl|de|uk|all> [image-ref]" >&2; exit 2; }
+usage() { echo "usage: apply.sh <worker|web> <pl|de|uk|us|all> [image-ref]" >&2; exit 2; }
 [[ $# -ge 2 ]] || usage
 
 tier="$1"; shift

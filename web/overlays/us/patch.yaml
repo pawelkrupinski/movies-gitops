@@ -1,0 +1,53 @@
+# THE COUNTRY'S OWN VALUES. See overlays/pl/patch.yaml for why every document repeats the namespace,
+# and why this stays at ONE replica.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-env
+  namespace: kinowo
+data:
+  # Serves the US repertoire: English UI, the kinowo_us database, the US state/territory list,
+  # rendering the same `web` binary as the Polish site. SINGULAR -- the worker's variable is
+  # KINOWO_COUNTRIES.
+  KINOWO_COUNTRY: "us"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: kinowo
+spec:
+  # ONE REPLICA, for the monitoring reason spelled out in overlays/pl/patch.yaml: Prometheus
+  # scrapes this tier through the NodePort, so a second pod behind it would have kube-proxy
+  # alternating between two independent sets of counters and every kinowo_web_* alert would see
+  # phantom resets.
+  replicas: 1
+  template:
+    spec:
+      containers:
+        - name: web
+          resources:
+            requests:
+              # Same reasoning as UK and DE: half Poland's CPU, identical memory. The big US
+              # roster is a WORKER-side cost -- the web tier serves one city at a time and its
+              # MovieCache is sized by films on screen, not by venues scraped. Memory stays at
+              # the base's 1Gi, the sizing proven not to OOM.
+              cpu: "500m"
+              memory: 1Gi
+            limits:
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: kinowo
+spec:
+  ports:
+    - name: http
+      port: 9000
+      targetPort: http
+      # Fixed -- named by the us.showtimes.cc Caddy vhost and by the Prometheus scrape config.
+      # 30910/30911/30912 are pl/de/uk, so this is the next free one.
+      nodePort: 30913

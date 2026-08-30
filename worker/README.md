@@ -1,16 +1,16 @@
 # The country workers on k3s
 
-THREE deployments -- `worker-pl`, `worker-de`, `worker-uk` -- built from one `base/` and three
-`overlays/`. They run the SAME image and differ in exactly four things: `KINOWO_COUNTRIES`, the two
-scrape-rate levers, the JVM heap, and the NodePort. Anything else that differs between them is a bug
-in the split, not a feature of a country.
+FOUR deployments -- `worker-pl`, `worker-de`, `worker-uk`, `worker-us` -- built from one `base/`
+and one overlay each. They run the SAME image and differ in exactly four things: `KINOWO_COUNTRIES`,
+the two scrape-rate levers, the JVM heap, and the NodePort. Anything else that differs between them
+is a bug in the split, not a feature of a country.
 
 `KINOWO_COUNTRIES` also picks the DATABASE (`Country.mongoDb` derives it), which is why
-**`MONGODB_DB` is never set anywhere** -- setting it would pin all three to one database and merge
-three corpora.
+**`MONGODB_DB` is never set anywhere** -- setting it would pin every country to one database and
+merge their corpora.
 
-All three corpora are served: the web tier runs beside these workers on the same cluster (see
-`../web/`), one deployment per country. A worker with no readers is no longer a normal state.
+Every corpus is served: the web tier runs beside these workers on the same cluster (see `../web/`),
+one deployment per country. A worker with no readers is no longer a normal state.
 
 `base/` + `overlays/` is the whole deployment. It carries no secrets: two are created out of band and
 are the only things standing between a fresh cluster and a running worker.
@@ -18,8 +18,8 @@ are the only things standing between a fresh cluster and a running worker.
 ## The two secrets, and why they are not in git
 
 ```
-kinowo/worker-secrets      credentials, SHARED by all three (identical: one Mongo user
-                           with readWrite on all three databases, one TMDB/OMDb/Zyte key set) (Mongo, TMDB, OMDb, Zyte, Telegram,
+kinowo/worker-secrets      credentials, SHARED by every country (identical: one Mongo user
+                           with readWrite on all the databases, one TMDB/OMDb/Zyte key set) (Mongo, TMDB, OMDb, Zyte, Telegram,
                            the Decodo proxy, Sentry)
 kinowo/ghcr-pull           a dockerconfigjson for ghcr.io, read:packages ONLY
 ```

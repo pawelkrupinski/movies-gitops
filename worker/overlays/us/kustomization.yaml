@@ -1,0 +1,29 @@
+# The United States worker.
+#
+# THE BIGGEST ROSTER IN THE FLEET BY A WIDE MARGIN: ~5,000 Flicks venues across 55 states and
+# territories, ~10x the UK's paced set and ~3x Germany's. Everything country-specific in this
+# overlay follows from that one number -- the 14h cadence, the 36 tasks per venue, and a heap
+# sized above DE's.
+#
+# EVERYTHING ELSE COMES FROM ../../base. If you find yourself copying a field here that is not
+# genuinely country-specific, it belongs in the base instead -- four near-identical overlays that
+# drift apart is exactly what the base exists to prevent.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: kinowo
+
+resources:
+  - ../../base
+
+# worker -> worker-us, worker-env -> worker-env-us, and so on for all five objects.
+nameSuffix: -us
+
+# So `kubectl -n kinowo get pods -l country=us` works, and so Prometheus can tell the four apart
+# from the pod labels if it ever discovers them rather than being told.
+labels:
+  - pairs:
+      country: us
+    includeSelectors: true
+
+patches:
+  - path: patch.yaml

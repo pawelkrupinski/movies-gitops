@@ -1,8 +1,8 @@
 # The country web tier on k3s
 
-THREE deployments — `web-pl`, `web-de`, `web-uk` — built from one `base/` and three `overlays/`.
-They run the SAME image and differ in exactly three things: `KINOWO_COUNTRY`, the CPU request, and
-the NodePort. Anything else that differs between them is a bug in the split, not a feature of a
+FOUR deployments — `web-pl`, `web-de`, `web-uk`, `web-us` — built from one `base/` and one overlay
+each. They run the SAME image and differ in exactly three things: `KINOWO_COUNTRY`, the CPU request,
+and the NodePort. Anything else that differs between them is a bug in the split, not a feature of a
 country.
 
 `KINOWO_COUNTRY` is **singular** here. The worker's variable is `KINOWO_COUNTRIES` (plural), and
@@ -37,11 +37,12 @@ reverse-proxies each hostname to a NodePort on loopback:
 kinowo.net           -> 127.0.0.1:30910   (web-pl)
 de.showtimes.cc      -> 127.0.0.1:30911   (web-de)
 uk.showtimes.cc      -> 127.0.0.1:30912   (web-uk)
+us.showtimes.cc      -> 127.0.0.1:30913   (web-us)
 showtimes.cc         -> 127.0.0.1:30912   the brand front door — a country picker, not the UK site
 www.{kinowo.net,showtimes.cc}             301 to the bare name
 ```
 
-The apex is not a fourth deployment. `models.Country.servesApex` makes any web process render a
+The apex is not a deployment of its own. `models.Country.servesApex` makes any web process render a
 country picker when the request `Host` is the bare apex, so it is pointed at the UK pods only
 because the picker is English-language chrome.
 
@@ -64,7 +65,7 @@ value into the remote process list for as long as the command ran.
 
 CI builds `ghcr.io/pawelkrupinski/movies-web:<sha>` (`.github/workflows/build-web-image.yaml`) and
 rolls it through the same forced-command endpoint the worker uses; the endpoint picks the
-Deployments from the repository name, so `movies-web` rolls these three and nothing else.
+Deployments from the repository name, so `movies-web` rolls these four and nothing else.
 
 ```
 # CI does this automatically. By hand:

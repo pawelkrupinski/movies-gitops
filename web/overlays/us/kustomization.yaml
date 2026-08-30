@@ -1,0 +1,23 @@
+# The United States web deployment -- us.showtimes.cc.
+#
+# EVERYTHING ELSE COMES FROM ../../base. If you find yourself copying a field here that is not
+# genuinely country-specific, it belongs in the base instead.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: kinowo
+
+resources:
+  - ../../base
+
+# web -> web-us, web-env -> web-env-us, and so on.
+nameSuffix: -us
+
+# So `kubectl -n kinowo get pods -l country=us` works, and so the four are distinguishable by
+# pod label as well as by name.
+labels:
+  - pairs:
+      country: us
+    includeSelectors: true
+
+patches:
+  - path: patch.yaml
