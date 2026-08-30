@@ -11,6 +11,22 @@ data:
   # rendering the same `web` binary as the Polish site. SINGULAR -- the worker's variable is
   # KINOWO_COUNTRIES.
   KINOWO_COUNTRY: "us"
+  # HEAP: 768m, double the base's 384m, and the US is the only country that needs it.
+  #
+  # The base sizing assumes a page is bounded by "one city's films", which holds for
+  # a Polish city or a UK county but NOT for a US state: California is ONE city with
+  # 486 venues, and its rendered page is 18.9 MB (1.06 MB gzipped) against Poznan's
+  # 2.0 MB. Rendering that inside a 384m heap OOM-killed this pod repeatedly on
+  # 2026-08-30 -- `OutOfMemoryError: Java heap space`, and because
+  # `pekko.jvm-exit-on-fatal-error` is on, the JVM exits rather than limping, so the
+  # symptom users see is a 502 while the container restarts.
+  #
+  # Everything else is the base's string verbatim; a ConfigMap patch replaces the
+  # whole key, so it has to be restated rather than appended to. Non-heap is
+  # unchanged (160m metaspace + 96m code cache + 64m direct), which is what sets the
+  # 2Gi limit below: 768 + 320 + JVM overhead sits comfortably inside it.
+  JAVA_OPTS: >-
+    -Xms768m -Xmx768m -XX:+UseG1GC -XX:MaxGCPauseMillis=50 -XX:+UseStringDeduplication -XX:ReservedCodeCacheSize=96m -XX:MaxMetaspaceSize=160m -XX:MaxDirectMemorySize=64m
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -29,14 +45,22 @@ spec:
         - name: web
           resources:
             requests:
-              # Same reasoning as UK and DE: half Poland's CPU, identical memory. The big US
-              # roster is a WORKER-side cost -- the web tier serves one city at a time and its
-              # MovieCache is sized by films on screen, not by venues scraped. Memory stays at
-              # the base's 1Gi, the sizing proven not to OOM.
+              # CPU as UK and DE: half Poland's.
+              #
+              # MEMORY IS THE US EXCEPTION -- 2Gi, not the base 1Gi. The note that used to sit
+              # here said the big roster was "a WORKER-side cost" because "the web tier serves
+              # one city at a time and its MovieCache is sized by films on screen, not by venues
+              # scraped". That is true of every country except this one: a US city IS a state,
+              # so California alone carries 486 venues and renders an 18.9 MB page, and the pod
+              # OOM-died serving it (2026-08-30). Sized to hold the 768m heap set above plus
+              # ~320m of non-heap with room to spare.
+              #
+              # Revisit once a state's page is split per metro (/:city/:area/) -- that removes
+              # the reason this number is high, and it should come back down to the base.
               cpu: "500m"
-              memory: 1Gi
+              memory: 2Gi
             limits:
-              memory: 1Gi
+              memory: 2Gi
 ---
 apiVersion: v1
 kind: Service
