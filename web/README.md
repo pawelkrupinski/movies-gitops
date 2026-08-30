@@ -79,8 +79,8 @@ value into the remote process list for as long as the command ran.
 
 ## Deploying
 
-CI builds `ghcr.io/pawelkrupinski/movies-web:<sha>` (`.github/workflows/build-web-image.yaml`) and
-rolls it through the same forced-command endpoint the worker uses; the endpoint picks the
+CI builds `ghcr.io/pawelkrupinski/movies-web:<sha>` (the `build-web` job in
+`.github/workflows/main.yml`) and rolls it through the same forced-command endpoint the worker uses; the endpoint picks the
 Deployments from the repository name, so `movies-web` rolls these four and nothing else.
 
 ```

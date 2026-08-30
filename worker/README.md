@@ -49,8 +49,9 @@ driver must not try to rediscover the topology.
 
 ## Deploying
 
-CI builds `ghcr.io/pawelkrupinski/movies-worker:<sha>` (`.github/workflows/build-worker-image.yaml`).
-To roll a build out:
+CI builds `ghcr.io/pawelkrupinski/movies-worker:<sha>` (the `build-worker` job in
+`.github/workflows/main.yml`, path-gated on `worker/**` and the shared inputs so a web-only push
+never restarts the worker). To roll a build out:
 
 ```
 # CI does this automatically. By hand, the forced-command endpoint rolls ALL THREE from one
