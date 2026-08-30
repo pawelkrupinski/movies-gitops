@@ -28,6 +28,29 @@ metadata:
   namespace: kinowo
 data:
   PORT: '9000'
+  # ONE ACCOUNT ACROSS ALL FOUR COUNTRIES -- deliberately NOT set yet.
+  #
+  # `models.Country.usersDbName` sends the `users` + `userStates` collections here
+  # instead of to the pod's own per-country database, which is what makes a
+  # visitor who signs in on one country the same person (same hidden films, same
+  # /plan picks) on the next. The session cookie is already shared: `AppLoader`
+  # leaves its path at the host root, so `/uk`, `/de` and `/us` send it to each
+  # other, and `AuthController.ssoStart` hands it across to kinowo.net.
+  #
+  # SETTING IT IS A DATA CUTOVER, NOT A CONFIG FLIP. The four databases each hold
+  # their own copy of the accounts made on them, so pointing every pod at an empty
+  # database would present every visitor with a blank account. Fold the rows in
+  # FIRST -- the migration is additive and leaves the source collections alone, so
+  # this is reversible by deleting the key again:
+  #
+  #   set -a; . ./.env.local; set +a
+  #   MONGODB_USERS_DB=kinowo_users sbt 'web/Test/runMain tools.SharedUsersMigration'          # dry run
+  #   MONGODB_USERS_DB=kinowo_users sbt 'web/Test/runMain tools.SharedUsersMigration --write'
+  #
+  # then uncomment, and re-run the migration once more afterwards to sweep up
+  # anyone who signed in during the window.
+  #
+  # MONGODB_USERS_DB: kinowo_users
   # Carried verbatim from fly.toml. G1 with a 384m heap is the known-good sizing: a pass at 192m
   # OOM-crash-looped once the MovieCache grew past a few cities, and the repeated JVM cold-starts
   # read as "high load" rather than as the OOM they were. Re-tuning it is a separate change from
