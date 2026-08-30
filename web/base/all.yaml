@@ -28,7 +28,7 @@ metadata:
   namespace: kinowo
 data:
   PORT: '9000'
-  # ONE ACCOUNT ACROSS ALL FOUR COUNTRIES -- deliberately NOT set yet.
+  # ONE ACCOUNT ACROSS ALL FOUR COUNTRIES.
   #
   # `models.Country.usersDbName` sends the `users` + `userStates` collections here
   # instead of to the pod's own per-country database, which is what makes a
@@ -37,20 +37,25 @@ data:
   # leaves its path at the host root, so `/uk`, `/de` and `/us` send it to each
   # other, and `AuthController.ssoStart` hands it across to kinowo.net.
   #
-  # SETTING IT IS A DATA CUTOVER, NOT A CONFIG FLIP. The four databases each hold
-  # their own copy of the accounts made on them, so pointing every pod at an empty
-  # database would present every visitor with a blank account. Fold the rows in
-  # FIRST -- the migration is additive and leaves the source collections alone, so
-  # this is reversible by deleting the key again:
+  # SETTING IT WAS A DATA CUTOVER, NOT A CONFIG FLIP, and the rows were folded in
+  # FIRST: the four databases each held their own copy of the accounts made on
+  # them, so pointing every pod at an empty database would have shown every
+  # visitor a blank account. `tools.SharedUsersMigration` did that fold. It is
+  # additive and left every source collection untouched, so this stays reversible
+  # by deleting the key again, and it is re-runnable to sweep up anyone who signed
+  # in on a country's own database during the window:
   #
-  #   set -a; . ./.env.local; set +a
-  #   MONGODB_USERS_DB=kinowo_users sbt 'web/Test/runMain tools.SharedUsersMigration'          # dry run
-  #   MONGODB_USERS_DB=kinowo_users sbt 'web/Test/runMain tools.SharedUsersMigration --write'
+  #   MONGODB_USERS_DB=kinowo sbt 'web/Test/runMain tools.SharedUsersMigration'          # dry run
+  #   MONGODB_USERS_DB=kinowo sbt 'web/Test/runMain tools.SharedUsersMigration --write'
   #
-  # then uncomment, and re-run the migration once more afterwards to sweep up
-  # anyone who signed in during the window.
-  #
-  # MONGODB_USERS_DB: kinowo_users
+  # WHY POLAND'S DATABASE AND NOT A DEDICATED `kinowo_users`. The obvious name was
+  # tried first and every write failed `Unauthorized`: the deployments' Mongo user
+  # is scoped to the four country databases, so a new one needs a grant on the
+  # server before the app could read or write it. `kinowo` is a database all four
+  # pods already hold rights on, and it is where 8 of the 11 account rows lived
+  # anyway, so the fold was mostly a no-op there. Moving to a database of its own
+  # later is this same variable plus that grant.
+  MONGODB_USERS_DB: kinowo
   # Carried verbatim from fly.toml. G1 with a 384m heap is the known-good sizing: a pass at 192m
   # OOM-crash-looped once the MovieCache grew past a few cities, and the repeated JVM cold-starts
   # read as "high load" rather than as the OOM they were. Re-tuning it is a separate change from
