@@ -1,4 +1,4 @@
-# The Germany web deployment -- de.showtimes.cc.
+# The Germany web deployment -- showtimes.cc/de/.
 #
 # EVERYTHING ELSE COMES FROM ../../base. If you find yourself copying a field here that is not
 # genuinely country-specific, it belongs in the base instead.

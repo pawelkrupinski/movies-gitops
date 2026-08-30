@@ -1,4 +1,4 @@
-# The United Kingdom web deployment -- uk.showtimes.cc, and the host Caddy also sends the bare showtimes.cc apex to.
+# The United Kingdom web deployment -- showtimes.cc/uk/.
 #
 # EVERYTHING ELSE COMES FROM ../../base. If you find yourself copying a field here that is not
 # genuinely country-specific, it belongs in the base instead.

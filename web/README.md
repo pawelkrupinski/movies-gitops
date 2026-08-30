@@ -35,16 +35,32 @@ reverse-proxies each hostname to a NodePort on loopback:
 
 ```
 kinowo.net           -> 127.0.0.1:30910   (web-pl)
-de.showtimes.cc      -> 127.0.0.1:30911   (web-de)
-uk.showtimes.cc      -> 127.0.0.1:30912   (web-uk)
-us.showtimes.cc      -> 127.0.0.1:30913   (web-us)
-showtimes.cc         -> 127.0.0.1:30912   the brand front door — a country picker, not the UK site
+showtimes.cc/de/*    -> 127.0.0.1:30911   (web-de)
+showtimes.cc/uk/*    -> 127.0.0.1:30912   (web-uk)
+showtimes.cc/us/*    -> 127.0.0.1:30913   (web-us)
+showtimes.cc/        -> 127.0.0.1:30910   the brand front door — a country picker, not Poland's site
 www.{kinowo.net,showtimes.cc}             301 to the bare name
 ```
 
-The apex is not a deployment of its own. `models.Country.servesApex` makes any web process render a
-country picker when the request `Host` is the bare apex, so it is pointed at the UK pods only
-because the picker is English-language chrome.
+The Showtimes countries share ONE domain and are told apart by a leading path segment. Each is
+still its own pod against its own database — one pod serving four countries would mean one process
+against four databases — and each MOUNTS itself at the matching prefix via `play.http.context`,
+derived from `models.Country.mountPath`. Caddy does not rewrite paths: the app emits `/uk/…` in
+every URL it generates, from reverse routes to the canonical link, the sitemap and the cookie
+paths.
+
+The subdomains those countries used to answer on (`uk.`/`de.`/`us.showtimes.cc`) serve NOTHING now
+— no vhost, no certificate, no redirect. A redirect map would be a second source of truth for
+where each country lives, and the mobile apps are store-release-gated regardless, so the cut is
+clean rather than half-migrated. **Installed app builds break until their users update.**
+
+The apex is not a deployment of its own. `models.Country.servesApex` makes a web process render the
+country picker when the request `Host` is the bare apex AND that process is mounted at `/` — which
+is why the apex falls through to POLAND's pod: it is the only one whose `/` is not already a
+country's own landing. The picker renders in English whichever deployment serves it. That fallback
+also answers the apex ROOT files a crawler or a mobile OS only ever fetches from a host root —
+`/robots.txt`, `/sitemap.xml`, `/.well-known/*` — for which the app has front-door variants (the
+sitemap is an INDEX of the three mounted countries, not a list of Poland's cities).
 
 **The A records must exist before a deploy.** Caddy obtains certificates over ACME HTTP-01, so a
 name that does not yet resolve to `204.168.140.213` fails issuance and the browser gets a hard TLS

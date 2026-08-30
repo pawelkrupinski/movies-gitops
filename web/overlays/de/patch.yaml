@@ -37,5 +37,5 @@ spec:
     - name: http
       port: 9000
       targetPort: http
-      # Fixed -- named by the de.showtimes.cc Caddy vhost and by the Prometheus scrape config.
+      # Fixed -- named by the showtimes.cc/de/* path handler in the host's Caddy config and by Prometheus.
       nodePort: 30911

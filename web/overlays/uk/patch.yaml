@@ -7,7 +7,10 @@ metadata:
   namespace: kinowo
 data:
   # Serves the UK repertoire: English UI, the kinowo_uk database, the UK city list, rendering the
-  # same `web` binary as the Polish site.
+  # same `web` binary as the Polish site. It also decides where the deployment is MOUNTED --
+  # `models.Country.mountPath` turns this into `play.http.context` = "/uk/", which is what makes
+  # every URL this pod emits start with the country segment it is proxied under. There is no
+  # separate path setting to keep in step.
   KINOWO_COUNTRY: "uk"
 ---
 apiVersion: apps/v1
@@ -41,8 +44,7 @@ spec:
     - name: http
       port: 9000
       targetPort: http
-      # Fixed, and named twice on the host: once for uk.showtimes.cc and once for the bare
-      # showtimes.cc apex, which this deployment also answers (the country picker is chosen by
-      # request Host, so any deployment renders it -- the UK one is simply the English-language
-      # pick). See infra/nix/hosts/k3s-worker-1/default.nix.
+      # Fixed -- named by the showtimes.cc/uk/* path handler in the host's Caddy config and by the
+      # Prometheus scrape config. An allocated port would change on re-create and take the public
+      # site down with it. See infra/nix/hosts/k3s-worker-1/default.nix.
       nodePort: 30912

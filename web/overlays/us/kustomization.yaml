@@ -1,4 +1,4 @@
-# The United States web deployment -- us.showtimes.cc.
+# The United States web deployment -- showtimes.cc/us/.
 #
 # EVERYTHING ELSE COMES FROM ../../base. If you find yourself copying a field here that is not
 # genuinely country-specific, it belongs in the base instead.

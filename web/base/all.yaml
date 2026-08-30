@@ -85,6 +85,12 @@ spec:
             memory: 1Gi
         # Boot is slow (Play start + the MovieCache rehydrate), so the slow start gets its own
         # probe rather than a lenient liveness threshold that would also excuse a wedged process.
+        #
+        # `/health` WITH NO COUNTRY PREFIX, on every overlay including the three that serve under
+        # one (`showtimes.cc/uk/...`). The kubelet talks to the pod's own address, never through
+        # Caddy, so it never carries the prefix -- and `modules.AppLoader.rootOperationalRoutes`
+        # keeps `/health` and `/metrics` answering at the root wherever the app is mounted, exactly
+        # so this stays one path for all four. Do not "fix" this to /uk/health.
         startupProbe:
           httpGet:
             path: /health
