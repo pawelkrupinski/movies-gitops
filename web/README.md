@@ -63,7 +63,7 @@ also answers the apex ROOT files a crawler or a mobile OS only ever fetches from
 sitemap is an INDEX of the three mounted countries, not a list of Poland's cities).
 
 **The A records must exist before a deploy.** Caddy obtains certificates over ACME HTTP-01, so a
-name that does not yet resolve to `204.168.140.213` fails issuance and the browser gets a hard TLS
+name that does not yet resolve to `2.28.47.31` fails issuance and the browser gets a hard TLS
 error rather than a degraded page.
 
 ## The two secrets, and why they are not in git
