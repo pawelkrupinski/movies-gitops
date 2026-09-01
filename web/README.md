@@ -85,7 +85,7 @@ Deployments from the repository name, so `movies-web` rolls these four and nothi
 
 ```
 # CI does this automatically. By hand:
-ssh -i <k8sdeploy key> k8sdeploy@2.28.52.210 ghcr.io/pawelkrupinski/movies-web:<sha>
+ssh -i <k8sdeploy key> k8sdeploy@128.140.49.167 ghcr.io/pawelkrupinski/movies-web:<sha>
 
 # Structural changes (not just the image) go through the shared apply.sh, which preserves the
 # pinned image CI set:

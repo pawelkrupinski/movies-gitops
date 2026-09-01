@@ -20,7 +20,7 @@
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ssh_target="${KINOWO_K3S_SSH:-root@2.28.52.210}"
+ssh_target="${KINOWO_K3S_SSH:-root@128.140.49.167}"
 kubectl=(ssh -o BatchMode=yes "$ssh_target" -- k3s kubectl)
 
 COUNTRIES=(pl de uk us)

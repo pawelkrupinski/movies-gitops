@@ -56,7 +56,7 @@ never restarts the worker). To roll a build out:
 ```
 # CI does this automatically. By hand, the forced-command endpoint rolls ALL THREE from one
 # image reference -- there is no version of "deploy" that leaves two countries on an older build:
-ssh -i <k8sdeploy key> k8sdeploy@2.28.52.210 ghcr.io/pawelkrupinski/movies-worker:<sha>
+ssh -i <k8sdeploy key> k8sdeploy@128.140.49.167 ghcr.io/pawelkrupinski/movies-worker:<sha>
 
 # Structural changes (not just the image) go through the shared apply.sh, which preserves the
 # pinned image. It takes the TIER first, because the web deployments use the same script:
