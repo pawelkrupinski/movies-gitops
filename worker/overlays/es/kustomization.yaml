@@ -1,0 +1,30 @@
+# The Spain worker.
+#
+# 594 SensaCine venues across 52 provinces -- between the UK's paced set and Germany's, and about
+# a third of Germany's roster. It is sized like the UK's for that reason rather than like DE's,
+# and it reaches its origin through the SAME client Germany does
+# (services.cinemas.common.WebediaShowtimesClient) on a DIFFERENT host, so none of its requests
+# come out of Germany's budget -- www.sensacine.com is its own zone with its own HostPolicies row.
+#
+# EVERYTHING ELSE COMES FROM ../../base. If you find yourself copying a field here that is not
+# genuinely country-specific, it belongs in the base instead -- five near-identical overlays that
+# drift apart is exactly what the base exists to prevent.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: kinowo
+
+resources:
+  - ../../base
+
+# worker -> worker-es, worker-env -> worker-env-es, and so on for all five objects.
+nameSuffix: -es
+
+# So `kubectl -n kinowo get pods -l country=es` works, and so Prometheus can tell the five apart
+# from the pod labels if it ever discovers them rather than being told.
+labels:
+  - pairs:
+      country: es
+    includeSelectors: true
+
+patches:
+  - path: patch.yaml

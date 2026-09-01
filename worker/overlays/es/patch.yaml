@@ -1,0 +1,83 @@
+# THE COUNTRY'S OWN VALUES. Four things differ between the workers and they are all here.
+#
+# EVERY DOCUMENT CARRIES `namespace: kinowo`, and it is not decoration: the base sets that
+# namespace, so a patch without it matches nothing and kustomize fails with
+# "no resource matches strategic merge patch ... [noNs]" -- which reads like the resource is
+# missing rather than like the selector is under-specified.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: worker-env
+  namespace: kinowo
+data:
+  # THE ONE VALUE THAT MAKES THIS THE SPAIN WORKER, and also what selects the database:
+  # Country.mongoDb derives it from the country, so this alone sends writes to the right corpus.
+  # MONGODB_DB is never set -- it would override that and merge every country.
+  KINOWO_COUNTRIES: "es"
+
+  # THE TWO SCRAPE-RATE LEVERS, AND THEY ARE COUPLED -- retune them together, never one alone.
+  # WorkerScrapeCadenceConfigSpec locks the pair and will fail if they drift apart.
+  #
+  # TASKS_PER_VENUE = 12. It is a property of the CLIENT, not of the country: a Webedia venue
+  # costs one venue page (which `planChunks` reads `data-showtimes-dates` off) plus one day-page
+  # per day that attribute advertises. Measured 2026-09-01 across 30 SensaCine venues drawn from
+  # both large and small provinces: mean 7.8 requests per venue, median 11, max 19, with 8 of the
+  # 30 dark (an empty `[]`, which costs just the listing fetch). 12 is that mean rounded up with
+  # room for a busier season -- deliberately ABOVE the measurement, because this number only makes
+  # the guard below stricter, and Germany's was left at a stale 5 through a horizon change and
+  # reported everything fine while its real sweep had grown to 7.9h.
+  #
+  # FRESHNESS = 420min (7h). www.sensacine.com gets its OWN 1400ms HostPolicies row -- rows match
+  # by host SUFFIX, so `filmstarts.de` does not match it and an unpaced host is the UK's 429 storm
+  # waiting to happen. That pace is Filmstarts' converged number adopted for a sibling market
+  # rather than a measured Spanish ceiling (see the row in RealHttpFetch for why), so the sweep is
+  # 594 venues x 12 requests x 1400ms = ~2.8h and 420 clears it with ~60% headroom.
+  #
+  # THE HEADROOM IS THE POINT, not slack to be reclaimed. The UK tried an hourly cadence on
+  # 2026-07-28 that made its sweep exactly fill its window: a pacer at a 100% duty cycle, a
+  # sustained flat load against one third-party origin, and a worker that never idles. It was
+  # reverted the same day.
+  KINOWO_SCRAPE_TASKS_PER_VENUE: "12"
+  KINOWO_SCRAPE_FRESHNESS_MINUTES: "420"
+
+  # Identical to the other countries except the heap. 448m, the UK's number rather than Germany's
+  # 640m: Spain's 594 venues sit close to the UK's paced set and well under Germany's 1,529.
+  JAVA_OPTS: >-
+    -Xms448m -Xmx448m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:+AutoCreateSharedArchive -XX:SharedArchiveFile=/data/app.jsa -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: kinowo
+spec:
+  template:
+    spec:
+      containers:
+        - name: worker
+          resources:
+            requests:
+              cpu: "1"
+              memory: 1Gi
+            limits:
+              # Memory limit EQUALS the request (Guaranteed QoS, so the kubelet does not evict this
+              # ahead of anything else) and there is deliberately NO CPU limit: a CPU limit is CFS
+              # quota, and a JVM whose GC or JIT threads are suspended mid-slice stalls far worse
+              # than the limit saves.
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker
+  namespace: kinowo
+spec:
+  ports:
+    - name: health
+      port: 9000
+      targetPort: health
+      # A FIXED PORT, because infra/nix/files/monitoring/scrape-kinowo-apps.yaml names it. An
+      # allocated one would change on re-create and the scrape would silently go stale.
+      # 30900/30901/30902/30903 are pl/de/uk/us, so this is the next free one.
+      nodePort: 30904

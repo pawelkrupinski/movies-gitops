@@ -1,0 +1,46 @@
+# THE COUNTRY'S OWN VALUES. See overlays/pl/patch.yaml for why every document repeats the namespace.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-env
+  namespace: kinowo
+data:
+  # Serves the Spanish repertoire: Spanish UI, the kinowo_es database, the 52-province city list.
+  # SINGULAR -- the worker's variable is KINOWO_COUNTRIES.
+  KINOWO_COUNTRY: "es"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: kinowo
+spec:
+  template:
+    spec:
+      containers:
+        - name: web
+          resources:
+            requests:
+              # Same reasoning as UK and DE: half Poland's CPU, identical memory. NOT the US's 2Gi
+              # exception -- that exists because a US "city" is a whole state (California renders
+              # 486 venues into one 18.9 MB page). A Spanish city is a PROVINCE, and the largest
+              # (Madrid) holds 51 venues, which is UK-county sized and well inside the base heap.
+              cpu: "500m"
+              memory: 1Gi
+            limits:
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: kinowo
+spec:
+  ports:
+    - name: http
+      port: 9000
+      targetPort: http
+      # Fixed -- named by the showtimes.cc/es/* path handler in the host's Caddy config and by
+      # Prometheus. 30910/30911/30912/30913 are pl/de/uk/us, so this is the next free one.
+      nodePort: 30914

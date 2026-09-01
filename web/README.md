@@ -38,13 +38,14 @@ kinowo.net           -> 127.0.0.1:30910   (web-pl)
 showtimes.cc/de/*    -> 127.0.0.1:30911   (web-de)
 showtimes.cc/uk/*    -> 127.0.0.1:30912   (web-uk)
 showtimes.cc/us/*    -> 127.0.0.1:30913   (web-us)
+showtimes.cc/es/*    -> 127.0.0.1:30914   (web-es)
 showtimes.cc/        -> 127.0.0.1:30910   the brand front door — a country picker, not Poland's site
 www.{kinowo.net,showtimes.cc}             301 to the bare name
 ```
 
 The Showtimes countries share ONE domain and are told apart by a leading path segment. Each is
-still its own pod against its own database — one pod serving four countries would mean one process
-against four databases — and each MOUNTS itself at the matching prefix via `play.http.context`,
+still its own pod against its own database — one pod serving every country would mean one process
+against every database — and each MOUNTS itself at the matching prefix via `play.http.context`,
 derived from `models.Country.mountPath`. Caddy does not rewrite paths: the app emits `/uk/…` in
 every URL it generates, from reverse routes to the canonical link, the sitemap and the cookie
 paths.

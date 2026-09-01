@@ -23,7 +23,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ssh_target="${KINOWO_K3S_SSH:-root@128.140.49.167}"
 kubectl=(ssh -o BatchMode=yes "$ssh_target" -- k3s kubectl)
 
-COUNTRIES=(pl de uk us)
+COUNTRIES=(pl de uk us es)
 TIERS=(worker web)
 
 usage() { echo "usage: apply.sh <worker|web> <pl|de|uk|us|all> [image-ref]" >&2; exit 2; }
