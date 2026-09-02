@@ -1,6 +1,6 @@
 # The country workers on k3s
 
-FOUR deployments -- `worker-pl`, `worker-de`, `worker-uk`, `worker-us` -- built from one `base/`
+FIVE deployments -- `worker-pl`, `worker-de`, `worker-uk`, `worker-us`, `worker-es` -- built from one `base/`
 and one overlay each. They run the SAME image and differ in exactly four things: `KINOWO_COUNTRIES`,
 the two scrape-rate levers, the JVM heap, and the NodePort. Anything else that differs between them
 is a bug in the split, not a feature of a country.
@@ -69,5 +69,5 @@ that restarts under `latest` can come back on a different build with nothing rec
 ## Rolling back to Fly
 
 The Fly app `kinowo-worker` still exists with its secrets and its config. Rollback is
-`kubectl -n kinowo scale deployment/worker-pl --replicas=0` (and worker-de / worker-uk) and then starting the Fly machine —
+`kubectl -n kinowo scale deployment/worker-pl --replicas=0` (and its siblings) and then starting the Fly machine —
 in that order, because two workers would both project the read model and both hold change streams.

@@ -1,4 +1,4 @@
-# The shared base. Overlays add a nameSuffix, so one cluster runs web-pl, web-de and web-uk from
+# The shared base. Overlays add a nameSuffix, so one cluster runs web-pl, web-de, web-uk, web-us and web-es from
 # these same four objects.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization

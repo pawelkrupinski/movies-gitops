@@ -1,6 +1,6 @@
 # The country web tier on k3s
 
-FOUR deployments — `web-pl`, `web-de`, `web-uk`, `web-us` — built from one `base/` and one overlay
+FIVE deployments — `web-pl`, `web-de`, `web-uk`, `web-us`, `web-es` — built from one `base/` and one overlay
 each. They run the SAME image and differ in exactly three things: `KINOWO_COUNTRY`, the CPU request,
 and the NodePort. Anything else that differs between them is a bug in the split, not a feature of a
 country.

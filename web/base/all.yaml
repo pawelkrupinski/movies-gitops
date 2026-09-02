@@ -28,13 +28,13 @@ metadata:
   namespace: kinowo
 data:
   PORT: '9000'
-  # ONE ACCOUNT ACROSS ALL FOUR COUNTRIES.
+  # ONE ACCOUNT ACROSS EVERY COUNTRY.
   #
   # `models.Country.usersDbName` sends the `users` + `userStates` collections here
   # instead of to the pod's own per-country database, which is what makes a
   # visitor who signs in on one country the same person (same hidden films, same
   # /plan picks) on the next. The session cookie is already shared: `AppLoader`
-  # leaves its path at the host root, so `/uk`, `/de` and `/us` send it to each
+  # leaves its path at the host root, so `/uk`, `/de`, `/us` and `/es` send it to each
   # other, and `AuthController.ssoStart` hands it across to kinowo.net.
   #
   # SETTING IT WAS A DATA CUTOVER, NOT A CONFIG FLIP, and the rows were folded in
@@ -51,7 +51,7 @@ data:
   # WHY POLAND'S DATABASE AND NOT A DEDICATED `kinowo_users`. The obvious name was
   # tried first and every write failed `Unauthorized`: the deployments' Mongo user
   # is scoped to the four country databases, so a new one needs a grant on the
-  # server before the app could read or write it. `kinowo` is a database all four
+  # server before the app could read or write it. `kinowo` is a database every one of them
   # pods already hold rights on, and it is where 8 of the 11 account rows lived
   # anyway, so the fold was mostly a no-op there. Moving to a database of its own
   # later is this same variable plus that grant.
@@ -118,7 +118,7 @@ spec:
         # one (`showtimes.cc/uk/...`). The kubelet talks to the pod's own address, never through
         # Caddy, so it never carries the prefix -- and `modules.AppLoader.rootOperationalRoutes`
         # keeps `/health` and `/metrics` answering at the root wherever the app is mounted, exactly
-        # so this stays one path for all four. Do not "fix" this to /uk/health.
+        # so this stays one path for all five. Do not "fix" this to /uk/health.
         startupProbe:
           httpGet:
             path: /health
