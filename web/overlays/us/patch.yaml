@@ -57,7 +57,17 @@ spec:
               #
               # Revisit once a state's page is split per metro (/:city/:area/) -- that removes
               # the reason this number is high, and it should come back down to the base.
-              cpu: "500m"
+              # MEASURED, not guessed. Every pod on this node used to reserve a round
+              # number -- a whole core per worker, 500m per web -- and the sum reached 97% of the
+              # node's 8 allocatable cores while the box itself idled at 16%. The scheduler admits
+              # on REQUESTS, so that left 240m free and no room for the extra pod a rolling update
+              # surges: web-es sat Pending and Spain served the wrong image until its old pod was
+              # deleted by hand. These numbers come from `max_over_time` of each pod's own
+              # `process_cpu_seconds_total` over 24h. `NodeCpuBudgetSpec` holds the sum.
+              # us web peaked at 0.59 cores -- it renders whole STATES, and California
+              # alone is 486 venues in one 18.9 MB page. Revisit once a state's page is split per
+              # metro (/:city/:area/); that is what makes this the largest web request.
+              cpu: "750m"
               memory: 2Gi
             limits:
               memory: 2Gi

@@ -25,11 +25,17 @@ spec:
         - name: web
           resources:
             requests:
-              # Half of Poland's. The UK MovieCache covers far fewer cities and the traffic is a
-              # fraction. Memory is kept at Poland's 1Gi deliberately rather than trimmed to match
-              # -- the heap sizing in the base is the one that was proven not to OOM, and
-              # rediscovering that limit on a live site is not worth the 256Mi.
-              cpu: "500m"
+              # MEASURED, not guessed. Every pod on this node used to reserve a round
+              # number -- a whole core per worker, 500m per web -- and the sum reached 97% of the
+              # node's 8 allocatable cores while the box itself idled at 16%. The scheduler admits
+              # on REQUESTS, so that left 240m free and no room for the extra pod a rolling update
+              # surges: web-es sat Pending and Spain served the wrong image until its old pod was
+              # deleted by hand. These numbers come from `max_over_time` of each pod's own
+              # `process_cpu_seconds_total` over 24h. `NodeCpuBudgetSpec` holds the sum.
+              # uk web peaked at 0.33 cores. Memory stays at Poland's 1Gi deliberately
+              # rather than trimmed to match -- the heap sizing in the base is the one proven not
+              # to OOM, and rediscovering that limit on a live site is not worth the 256Mi.
+              cpu: "400m"
               memory: 1Gi
             limits:
               memory: 1Gi

@@ -37,7 +37,16 @@ spec:
         - name: worker
           resources:
             requests:
-              cpu: "1"
+              # MEASURED, not guessed. Every pod on this node used to reserve a round
+              # number -- a whole core per worker, 500m per web -- and the sum reached 97% of the
+              # node's 8 allocatable cores while the box itself idled at 16%. The scheduler admits
+              # on REQUESTS, so that left 240m free and no room for the extra pod a rolling update
+              # surges: web-es sat Pending and Spain served the wrong image until its old pod was
+              # deleted by hand. These numbers come from `max_over_time` of each pod's own
+              # `process_cpu_seconds_total` over 24h. `NodeCpuBudgetSpec` holds the sum.
+              # pl worker peaked at 0.31 cores: the shortest cadence in the fleet
+              # (60min) over the smallest roster.
+              cpu: "500m"
               memory: 1Gi
             limits:
               # Memory limit EQUALS the request (Guaranteed QoS, so the kubelet does not evict this
