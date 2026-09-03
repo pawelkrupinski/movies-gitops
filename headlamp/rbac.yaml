@@ -111,6 +111,26 @@ roleRef:
   kind: ClusterRole
   name: headlamp-read
 subjects:
+  # The pod's own identity, used for the backend's cluster-independent calls.
   - kind: ServiceAccount
     name: headlamp
     namespace: monitoring
+
+  # THE PEOPLE. Once the API server trusts Google as an issuer (fleet.k3sServer.oidc on
+  # monitoring-1), a signed-in user is a Kubernetes subject in their own right and their token --
+  # not the ServiceAccount's -- carries their API calls. Authentication grants nothing on its own:
+  # without these two names an accepted login lands on a UI that 403s every panel.
+  #
+  # `oidc:` IS PART OF THE NAME, not decoration. It is the `--oidc-username-prefix` the API server
+  # is started with, and it exists so an OIDC identity can never collide with a client-certificate
+  # CN or a ServiceAccount of the same string. Drop the prefix here and the binding matches nobody.
+  #
+  # Named individually rather than by a group claim: Google issues no group for a personal account,
+  # and two names that have to be edited to add a third person is the right amount of friction for
+  # a cluster this size.
+  - kind: User
+    name: "oidc:pawel.krupinski@gmail.com"
+    apiGroup: rbac.authorization.k8s.io
+  - kind: User
+    name: "oidc:pawel@bitcashier.io"
+    apiGroup: rbac.authorization.k8s.io
