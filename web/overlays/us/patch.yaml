@@ -43,7 +43,7 @@ data:
   # unchanged (160m metaspace + 96m code cache + 64m direct), which is what sets the
   # 2Gi limit below: 1024 + 320 + JVM overhead sits inside it.
   JAVA_OPTS: >-
-    -Xms1024m -Xmx1024m -XX:+UseG1GC -XX:MaxGCPauseMillis=50 -XX:+UseStringDeduplication -XX:ReservedCodeCacheSize=96m -XX:MaxMetaspaceSize=160m -XX:MaxDirectMemorySize=64m
+    -Xms1024m -Xmx1024m -XX:+UseG1GC -XX:MaxGCPauseMillis=50 -XX:+UseStringDeduplication -XX:ReservedCodeCacheSize=96m -XX:MaxMetaspaceSize=160m -XX:MaxDirectMemorySize=64m -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log
 ---
 apiVersion: apps/v1
 kind: Deployment
