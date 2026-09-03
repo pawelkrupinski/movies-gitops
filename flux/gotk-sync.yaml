@@ -1,0 +1,101 @@
+# What Flux watches, and — more importantly — what it deliberately does NOT.
+#
+# ------------------------------------------------------------------------------------------------
+# WHY FLUX AT ALL
+# ------------------------------------------------------------------------------------------------
+#
+# Because config that is committed, reviewed and green does not reach this cluster. The deploy
+# endpoint can only run `kubectl set image` (roles/k8s-deploy.nix: it "cannot run kubectl, and
+# cannot name a resource"), so a ConfigMap, a resource limit or a JVM flag arrives only when
+# somebody applies it by hand. On 2026-09-03 that cost an outage: web-us ran three hours at
+# -Xmx768m with a merged, CI-green, `deployed-web`-tagged raise to 1024m sitting unapplied, and
+# OOM-killed the public tier. Nothing was red at any point. The same gap bit twice more the same
+# day, both times on changes written to close it.
+#
+# Reconciliation is the fix, not a better alarm: a controller that continuously compares the
+# cluster to git makes that drift self-correcting instead of merely visible.
+#
+# ------------------------------------------------------------------------------------------------
+# ⚠️ WHY web AND worker ARE NOT HERE, WHICH IS THE WHOLE DESIGN OF THIS FILE
+# ------------------------------------------------------------------------------------------------
+#
+# Their manifests say `image: ghcr.io/pawelkrupinski/movies-{web,worker}:latest`, and CI pins a
+# commit SHA over the top with `kubectl set image`. Those two are already known to fight —
+# infra/kubernetes/apply.sh exists solely to read the running image, apply, and put it back.
+#
+# Point a reconciler at those paths and it wins that fight every five minutes: production reverts
+# to whatever `:latest` happens to be, with no record of which build that is, forever. That is
+# strictly worse than the drift this exists to fix.
+#
+# So stage one takes only the paths whose images are ALREADY PINNED IN GIT. Nothing here can
+# conflict with CI, because CI does not touch these.
+#
+# THE STAGES AFTER THIS, so the shape is on record rather than rediscovered:
+#
+#   2. Split the app tiers so the ConfigMaps (the things that actually drifted) are reconciled
+#      while the Deployments stay with CI. That closes the JAVA_OPTS gap without touching images.
+#   3. Retire `set image` entirely: Flux's image-automation controllers watch the registry and
+#      commit the new tag to git, so the pin lives in the repository and one mechanism owns the
+#      cluster. That is the end state; it is also the one that needs the most care, so it is not
+#      being done in the same change as the install.
+#
+# NOT SELF-MANAGED, deliberately. `flux bootstrap` would have Flux reconcile its own components
+# from git, which is the usual arrangement and the right one later. For a first install it means a
+# bad component version can break the thing that would have rolled it back, so gotk-components.yaml
+# is applied by hand and upgrading Flux is a re-apply. Revisit at stage 3.
+#
+# NO GIT CREDENTIAL, because github.com/pawelkrupinski/movies is public. Nothing to rotate, nothing
+# to leak, and the cluster holds no token that reaches the repository. If the repo is ever made
+# private this file needs a `secretRef` and a read-only deploy key, and the reconciliation will
+# fail loudly (not silently) in the meantime.
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: movies
+  namespace: flux-system
+spec:
+  # Five minutes: fast enough that a hand-applied hotfix is reverted-or-confirmed within one coffee,
+  # slow enough that a public clone of a repository this size is not a background job.
+  interval: 5m
+  url: https://github.com/pawelkrupinski/movies
+  ref:
+    branch: main
+  # Only the paths below are ever read; the ~18k files of Scala are ignored so the artifact the
+  # source-controller keeps in memory stays small.
+  ignore: |
+    /*
+    !/infra/kubernetes/
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: kube-state-metrics
+  namespace: flux-system
+spec:
+  interval: 10m
+  sourceRef:
+    kind: GitRepository
+    name: movies
+  path: ./infra/kubernetes/kube-state-metrics
+  # PRUNE ON. Flux deletes only what it created and still labels as its own, so this removes a
+  # resource when its manifest leaves git — the half of reconciliation that a plain `apply` never
+  # does, and the reason a deleted manifest currently leaves a live object behind.
+  prune: true
+  wait: true
+  timeout: 3m
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: headlamp
+  namespace: flux-system
+spec:
+  interval: 10m
+  sourceRef:
+    kind: GitRepository
+    name: movies
+  path: ./infra/kubernetes/headlamp
+  prune: true
+  wait: true
+  timeout: 3m
