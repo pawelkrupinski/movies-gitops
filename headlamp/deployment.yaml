@@ -19,10 +19,12 @@
 # IT IS NOT PUBLISHED, AND THAT IS THE DEFAULT ON PURPOSE
 # ------------------------------------------------------------------------------------------------
 #
-# `ClusterIP`, not the NodePort kube-state-metrics uses. roles/public-proxy.nix states the rule this
-# follows: "the proxy adds TLS and a name, not authentication", which is why Grafana -- the one
-# service that authenticates its own users -- is the only thing published. A Kubernetes UI behind
-# that proxy and nothing else would be cluster-wide read on the open internet.
+# PUBLISHED AT headlamp.kinowo.net, and only once it could authenticate its own users.
+# roles/public-proxy.nix states the rule: "the proxy adds TLS and a name, not authentication",
+# which is why Grafana was for a long time the only thing published. Headlamp now clears the same
+# bar through Google OIDC, and clears it twice over: the consent screen is in TESTING mode, so
+# only the accounts listed as test users on the Google project can authenticate AT ALL -- an
+# allow-list Google enforces before a request ever reaches this pod.
 #
 # Reach it, today, with a port-forward over the same ssh tunnel that reaches the API:
 #
@@ -76,6 +78,31 @@ spec:
           args:
             - "-in-cluster"
             - "-plugins-dir=/headlamp/plugins"
+          env:
+            # OIDC AGAINST GOOGLE, so the published instance authenticates people rather than
+            # asking for a service-account token. `HEADLAMP_CONFIG_*` is Headlamp's documented
+            # env form of the `-oidc-*` flags; the flags cannot read a Secret, and the secret
+            # must not be an argv string visible in `kubectl get pod -o yaml`.
+            #
+            # ⚠️ VERIFY THE LOGIN PAGE OFFERS "Sign in", not a token box. A misspelt
+            # HEADLAMP_CONFIG_* name is ACCEPTED AND IGNORED -- the same shape that made
+            # Reloader's `RELOADER_AUTO_RELOAD_ALL` do nothing silently, which is why this
+            # comment exists rather than a trusting one.
+            - name: HEADLAMP_CONFIG_OIDC_CLIENT_ID
+              valueFrom:
+                secretKeyRef: { name: headlamp-oidc, key: client-id }
+            - name: HEADLAMP_CONFIG_OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef: { name: headlamp-oidc, key: client-secret }
+            - name: HEADLAMP_CONFIG_OIDC_IDP_ISSUER_URL
+              value: "https://accounts.google.com"
+            - name: HEADLAMP_CONFIG_OIDC_SCOPES
+              value: "openid,email,profile"
+            # Must match the redirect URI registered on the Google client EXACTLY, or the
+            # consent screen refuses with redirect_uri_mismatch.
+            - name: HEADLAMP_CONFIG_BASE_URL
+              value: ""
+
           ports:
             - name: http
               containerPort: 4466
@@ -141,8 +168,14 @@ metadata:
   labels:
     app: headlamp
 spec:
-  # ClusterIP -- deliberately unreachable from outside the cluster. See the header.
+  # ClusterIP, reached by Caddy on monitoring-1 -- which is a cluster NODE, so kube-proxy makes
+  # this address routable from the host without publishing a NodePort on every node's interfaces.
+  #
+  # PINNED, not allocated. A Service deleted and recreated gets a different address out of the
+  # 10.43.0.0/16 range, and the vhost in hosts/monitoring-1 names this one -- so an unpinned
+  # address turns a routine `kubectl delete svc` into a 502 nobody connects to the cause.
   type: ClusterIP
+  clusterIP: 10.43.165.84
   selector:
     app: headlamp
   ports:
