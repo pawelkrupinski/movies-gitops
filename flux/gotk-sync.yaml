@@ -16,7 +16,7 @@
 # cluster to git makes that drift self-correcting instead of merely visible.
 #
 # ------------------------------------------------------------------------------------------------
-# ⚠️ WHY web AND worker ARE NOT HERE, WHICH IS THE WHOLE DESIGN OF THIS FILE
+# ⚠️ WHY web AND worker ARE HERE WITH THEIR DEPLOYMENTS SWITCHED OFF
 # ------------------------------------------------------------------------------------------------
 #
 # Their manifests say `image: ghcr.io/pawelkrupinski/movies-{web,worker}:latest`, and CI pins a
@@ -27,17 +27,29 @@
 # to whatever `:latest` happens to be, with no record of which build that is, forever. That is
 # strictly worse than the drift this exists to fix.
 #
-# So stage one takes only the paths whose images are ALREADY PINNED IN GIT. Nothing here can
-# conflict with CI, because CI does not touch these.
+# The answer is NOT to keep those paths out — the ConfigMap is exactly what drifted, and leaving
+# it unreconciled leaves the outage's cause in place. It is to reconcile the path and exclude the
+# one object that conflicts: each app Kustomization below carries a `patches` entry stamping
+# `kustomize.toolkit.fluxcd.io/reconcile: disabled` onto every Deployment, which tells
+# kustomize-controller to skip that object entirely. Flux owns the ConfigMap and the Service; CI
+# keeps the Deployment and its pinned image, exactly as today.
 #
-# THE STAGES AFTER THIS, so the shape is on record rather than rediscovered:
+# WHY THIS AND NOT A MANIFEST SPLIT. Separating the ConfigMap into its own path was tried first
+# and is worse: kustomize refuses to load a patch from outside its own root, so the split needs a
+# second copy of each overlay's nameSuffix and labels, and a second place for the values to drift
+# against. This annotation needs no structural change at all — `kustomize build` output for every
+# overlay is byte-identical to before, which is the property that makes it safe to apply.
 #
-#   2. Split the app tiers so the ConfigMaps (the things that actually drifted) are reconciled
-#      while the Deployments stay with CI. That closes the JAVA_OPTS gap without touching images.
-#   3. Retire `set image` entirely: Flux's image-automation controllers watch the registry and
-#      commit the new tag to git, so the pin lives in the repository and one mechanism owns the
-#      cluster. That is the end state; it is also the one that needs the most care, so it is not
-#      being done in the same change as the install.
+# ⚠️ A ConfigMap CHANGE DOES NOT RESTART PODS. Flux keeps the stored value correct; a running JVM
+# picks it up at its next roll, which on this fleet is ~13 deploys a day. That shrinks the stale
+# window from "until somebody notices" — three hours and an OOM, on 2026-09-03 — to "until the
+# next deploy". It does not eliminate it. Closing the last gap means either letting Flux own the
+# Deployment (blocked on retiring `set image`) or a restart-on-change controller.
+#
+# THE STAGE AFTER THIS: retire `set image` entirely. Flux's image-automation controllers watch the
+# registry and commit the new tag to git, so the pin lives in the repository, one mechanism owns
+# the cluster, and the annotation below comes off. That is the end state and the one that needs
+# the most care, so it is not being done in the same change.
 #
 # NOT SELF-MANAGED, deliberately. `flux bootstrap` would have Flux reconcile its own components
 # from git, which is the usual arrangement and the right one later. For a first install it means a
@@ -99,3 +111,293 @@ spec:
   prune: true
   wait: true
   timeout: 3m
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: web-pl-config
+  namespace: flux-system
+spec:
+  interval: 10m
+  sourceRef:
+    kind: GitRepository
+    name: movies
+  path: ./infra/kubernetes/web/overlays/pl
+  # PRUNE OFF for the app tiers. Everything here predates Flux and is co-owned with CI; a prune
+  # sweep on a path whose Deployment is deliberately unmanaged is a sharp edge for no gain.
+  prune: false
+  wait: false
+  timeout: 3m
+  patches:
+    # THE ONE OBJECT FLUX MUST NOT TOUCH. Without this it would write the manifest's
+    # `image: ...:latest` over the SHA CI pinned, every interval, forever.
+    - patch: |
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: not-used
+          annotations:
+            kustomize.toolkit.fluxcd.io/reconcile: disabled
+      target:
+        kind: Deployment
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: web-de-config
+  namespace: flux-system
+spec:
+  interval: 10m
+  sourceRef:
+    kind: GitRepository
+    name: movies
+  path: ./infra/kubernetes/web/overlays/de
+  # PRUNE OFF for the app tiers. Everything here predates Flux and is co-owned with CI; a prune
+  # sweep on a path whose Deployment is deliberately unmanaged is a sharp edge for no gain.
+  prune: false
+  wait: false
+  timeout: 3m
+  patches:
+    # THE ONE OBJECT FLUX MUST NOT TOUCH. Without this it would write the manifest's
+    # `image: ...:latest` over the SHA CI pinned, every interval, forever.
+    - patch: |
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: not-used
+          annotations:
+            kustomize.toolkit.fluxcd.io/reconcile: disabled
+      target:
+        kind: Deployment
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: web-uk-config
+  namespace: flux-system
+spec:
+  interval: 10m
+  sourceRef:
+    kind: GitRepository
+    name: movies
+  path: ./infra/kubernetes/web/overlays/uk
+  # PRUNE OFF for the app tiers. Everything here predates Flux and is co-owned with CI; a prune
+  # sweep on a path whose Deployment is deliberately unmanaged is a sharp edge for no gain.
+  prune: false
+  wait: false
+  timeout: 3m
+  patches:
+    # THE ONE OBJECT FLUX MUST NOT TOUCH. Without this it would write the manifest's
+    # `image: ...:latest` over the SHA CI pinned, every interval, forever.
+    - patch: |
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: not-used
+          annotations:
+            kustomize.toolkit.fluxcd.io/reconcile: disabled
+      target:
+        kind: Deployment
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: web-us-config
+  namespace: flux-system
+spec:
+  interval: 10m
+  sourceRef:
+    kind: GitRepository
+    name: movies
+  path: ./infra/kubernetes/web/overlays/us
+  # PRUNE OFF for the app tiers. Everything here predates Flux and is co-owned with CI; a prune
+  # sweep on a path whose Deployment is deliberately unmanaged is a sharp edge for no gain.
+  prune: false
+  wait: false
+  timeout: 3m
+  patches:
+    # THE ONE OBJECT FLUX MUST NOT TOUCH. Without this it would write the manifest's
+    # `image: ...:latest` over the SHA CI pinned, every interval, forever.
+    - patch: |
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: not-used
+          annotations:
+            kustomize.toolkit.fluxcd.io/reconcile: disabled
+      target:
+        kind: Deployment
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: web-es-config
+  namespace: flux-system
+spec:
+  interval: 10m
+  sourceRef:
+    kind: GitRepository
+    name: movies
+  path: ./infra/kubernetes/web/overlays/es
+  # PRUNE OFF for the app tiers. Everything here predates Flux and is co-owned with CI; a prune
+  # sweep on a path whose Deployment is deliberately unmanaged is a sharp edge for no gain.
+  prune: false
+  wait: false
+  timeout: 3m
+  patches:
+    # THE ONE OBJECT FLUX MUST NOT TOUCH. Without this it would write the manifest's
+    # `image: ...:latest` over the SHA CI pinned, every interval, forever.
+    - patch: |
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: not-used
+          annotations:
+            kustomize.toolkit.fluxcd.io/reconcile: disabled
+      target:
+        kind: Deployment
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: worker-pl-config
+  namespace: flux-system
+spec:
+  interval: 10m
+  sourceRef:
+    kind: GitRepository
+    name: movies
+  path: ./infra/kubernetes/worker/overlays/pl
+  # PRUNE OFF for the app tiers. Everything here predates Flux and is co-owned with CI; a prune
+  # sweep on a path whose Deployment is deliberately unmanaged is a sharp edge for no gain.
+  prune: false
+  wait: false
+  timeout: 3m
+  patches:
+    # THE ONE OBJECT FLUX MUST NOT TOUCH. Without this it would write the manifest's
+    # `image: ...:latest` over the SHA CI pinned, every interval, forever.
+    - patch: |
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: not-used
+          annotations:
+            kustomize.toolkit.fluxcd.io/reconcile: disabled
+      target:
+        kind: Deployment
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: worker-de-config
+  namespace: flux-system
+spec:
+  interval: 10m
+  sourceRef:
+    kind: GitRepository
+    name: movies
+  path: ./infra/kubernetes/worker/overlays/de
+  # PRUNE OFF for the app tiers. Everything here predates Flux and is co-owned with CI; a prune
+  # sweep on a path whose Deployment is deliberately unmanaged is a sharp edge for no gain.
+  prune: false
+  wait: false
+  timeout: 3m
+  patches:
+    # THE ONE OBJECT FLUX MUST NOT TOUCH. Without this it would write the manifest's
+    # `image: ...:latest` over the SHA CI pinned, every interval, forever.
+    - patch: |
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: not-used
+          annotations:
+            kustomize.toolkit.fluxcd.io/reconcile: disabled
+      target:
+        kind: Deployment
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: worker-uk-config
+  namespace: flux-system
+spec:
+  interval: 10m
+  sourceRef:
+    kind: GitRepository
+    name: movies
+  path: ./infra/kubernetes/worker/overlays/uk
+  # PRUNE OFF for the app tiers. Everything here predates Flux and is co-owned with CI; a prune
+  # sweep on a path whose Deployment is deliberately unmanaged is a sharp edge for no gain.
+  prune: false
+  wait: false
+  timeout: 3m
+  patches:
+    # THE ONE OBJECT FLUX MUST NOT TOUCH. Without this it would write the manifest's
+    # `image: ...:latest` over the SHA CI pinned, every interval, forever.
+    - patch: |
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: not-used
+          annotations:
+            kustomize.toolkit.fluxcd.io/reconcile: disabled
+      target:
+        kind: Deployment
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: worker-us-config
+  namespace: flux-system
+spec:
+  interval: 10m
+  sourceRef:
+    kind: GitRepository
+    name: movies
+  path: ./infra/kubernetes/worker/overlays/us
+  # PRUNE OFF for the app tiers. Everything here predates Flux and is co-owned with CI; a prune
+  # sweep on a path whose Deployment is deliberately unmanaged is a sharp edge for no gain.
+  prune: false
+  wait: false
+  timeout: 3m
+  patches:
+    # THE ONE OBJECT FLUX MUST NOT TOUCH. Without this it would write the manifest's
+    # `image: ...:latest` over the SHA CI pinned, every interval, forever.
+    - patch: |
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: not-used
+          annotations:
+            kustomize.toolkit.fluxcd.io/reconcile: disabled
+      target:
+        kind: Deployment
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: worker-es-config
+  namespace: flux-system
+spec:
+  interval: 10m
+  sourceRef:
+    kind: GitRepository
+    name: movies
+  path: ./infra/kubernetes/worker/overlays/es
+  # PRUNE OFF for the app tiers. Everything here predates Flux and is co-owned with CI; a prune
+  # sweep on a path whose Deployment is deliberately unmanaged is a sharp edge for no gain.
+  prune: false
+  wait: false
+  timeout: 3m
+  patches:
+    # THE ONE OBJECT FLUX MUST NOT TOUCH. Without this it would write the manifest's
+    # `image: ...:latest` over the SHA CI pinned, every interval, forever.
+    - patch: |
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: not-used
+          annotations:
+            kustomize.toolkit.fluxcd.io/reconcile: disabled
+      target:
+        kind: Deployment
