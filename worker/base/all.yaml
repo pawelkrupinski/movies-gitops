@@ -1,19 +1,3 @@
-# COUNTRY-AGNOSTIC BASE. Everything here is true of the PL, DE and UK workers alike; anything
-# that differs between them lives in overlays/<country>/ and nowhere else.
-#
-# WHAT DELIBERATELY IS NOT HERE, because getting it wrong merges three corpora into one:
-#
-#   KINOWO_COUNTRIES  the ONE value that distinguishes the three, and also what picks the
-#                     database -- Country.mongoDb derives the name from the country. Which is
-#                     why MONGODB_DB IS NEVER SET ANYWHERE, in the base or an overlay: setting
-#                     it would pin every country to a single database.
-#   the scrape levers KINOWO_SCRAPE_FRESHNESS_MINUTES and KINOWO_SCRAPE_TASKS_PER_VENUE are the
-#                     dominant write-rate controls and the three corpora are not alike. The
-#                     values in the overlays are carried from the Fly deployment, where they
-#                     were arrived at against real load rather than guessed.
-#   JAVA_OPTS         DE runs a 640m heap against PL and UK's 448m, for a larger corpus.
-#   nodePort          one fixed port each, because prometheus.yaml names them.
----
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -84,7 +68,7 @@ spec:
         #
         # NOT `latest`, ever: a pod restarting under a moving tag can come back on a
         # different build with nothing recording which. The value below is a real build.
-        image: ghcr.io/pawelkrupinski/movies-worker:b5af6c9f17c2a2b42bff9066db3507f296ebb257 # {"$imagepolicy": "flux-system:movies-worker"}
+        image: ghcr.io/pawelkrupinski/movies-worker:main-20260903215048-8d9747f # {"$imagepolicy": "flux-system:movies-worker"}
         imagePullPolicy: IfNotPresent
         envFrom:
         - configMapRef:
