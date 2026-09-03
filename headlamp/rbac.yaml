@@ -126,11 +126,14 @@ subjects:
   # CN or a ServiceAccount of the same string. Drop the prefix here and the binding matches nobody.
   #
   # Named individually rather than by a group claim: Google issues no group for a personal account,
-  # and two names that have to be edited to add a third person is the right amount of friction for
-  # a cluster this size.
+  # and a name that has to be edited to add a person is the right amount of friction for a cluster
+  # this size.
+  #
+  # ONE ACCOUNT, deliberately. `pawel@bitcashier.io` was bound here briefly and removed: it is the
+  # same person, and a second identity that can read the cluster is a second thing to remember when
+  # access is reviewed or revoked. Both halves have to go together -- this binding AND the Google
+  # project's test-user list, which is the allow-list that decides whether a token is minted at all.
+  # Removing only the binding leaves an account that can still sign in and then 403.
   - kind: User
     name: "oidc:pawel.krupinski@gmail.com"
-    apiGroup: rbac.authorization.k8s.io
-  - kind: User
-    name: "oidc:pawel@bitcashier.io"
     apiGroup: rbac.authorization.k8s.io
