@@ -88,6 +88,14 @@ spec:
               memory: 2Gi
             limits:
               memory: 2Gi
+      # 2Gi, not the base's 1Gi: this heap is 1024m, so its dump is ~600MiB rather than the
+      # ~150MiB the 384m countries produce, and the ceiling has to clear ONE KEPT DUMP PLUS THE
+      # ONE BEING WRITTEN. Going over evicts the pod, which on the only public tier is a worse
+      # outcome than having no dump at all.
+      volumes:
+        - name: data
+          emptyDir:
+            sizeLimit: 2Gi
 ---
 apiVersion: v1
 kind: Service
