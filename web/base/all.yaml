@@ -67,6 +67,11 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: web
+  annotations:
+    # Restart this Deployment when a ConfigMap it reads actually changes — see
+    # infra/kubernetes/reloader/. Reloader has no global mode, so the opt-in is per
+    # workload; here in the base so every country inherits it.
+    reloader.stakater.com/auto: "true"
   namespace: kinowo
   labels:
     app: web

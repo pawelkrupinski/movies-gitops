@@ -1,0 +1,148 @@
+# Reloader: restarts a Deployment when the ConfigMap it reads actually changes.
+#
+# ------------------------------------------------------------------------------------------------
+# THE LAST GAP IN THE 2026-09-03 OUTAGE, AND WHY FLUX ALONE DOES NOT CLOSE IT
+# ------------------------------------------------------------------------------------------------
+#
+# web-us OOM-killed the public tier running -Xmx768m while a merged, CI-green raise to 1024m sat
+# unapplied. Flux now reconciles these ConfigMaps, so the STORED value is correct within minutes
+# and cannot drift back -- proven by patching web-env-us to 768m by hand and watching it return.
+#
+# But a ConfigMap is read at POD CREATION. Correcting the stored value changes nothing about the
+# JVM already running on the old one; it picks the new value up at its next roll. On this fleet
+# that is ~13 deploys a day, so the stale window went from "until somebody notices" -- three hours,
+# on the day in question -- to "until the next deploy". Better, and not zero.
+#
+# The obvious fix is the one that is blocked: let Flux own the Deployment, and a ConfigMap change
+# rolls it. Flux cannot own these Deployments while CI pins their images with `kubectl set image`
+# (see gotk-sync.yaml), so that waits on retiring `set image` entirely.
+#
+# This is the other way round: watch the ConfigMaps, and when one really changes, patch a
+# restart annotation onto the Deployments that consume it. Nothing about image ownership moves.
+#
+# ------------------------------------------------------------------------------------------------
+# IT OPTS IN PER DEPLOYMENT, BECAUSE THE ALTERNATIVE DOES NOT EXIST
+# ------------------------------------------------------------------------------------------------
+#
+# The intent was a global "watch everything" mode, so there would be no annotation to forget.
+# `--auto-reload-all` DOES NOT EXIST in any released Reloader -- v1.0.28 is the newest tag and the
+# binary answers `unknown flag`. The env var `RELOADER_AUTO_RELOAD_ALL` is worse than absent: it is
+# accepted and silently ignored, so the watchers start, a ConfigMap changes, and nothing happens
+# with nothing logged. Both were tried against this cluster before this comment was written.
+#
+# So the opt-in annotation it is: `reloader.stakater.com/auto: "true"` on each app Deployment, set
+# in web/base and worker/base so every country inherits it.
+#
+# ⚠️ THAT ANNOTATION REACHES THE CLUSTER BY NEITHER AUTOMATIC PATH. Flux deliberately skips these
+# Deployments (gotk-sync.yaml) and CI only ever writes their image, so putting it in the manifest
+# does NOT deliver it -- it was applied once by hand, and it persists because nothing removes it:
+# `kubectl set image` leaves annotations alone and Flux does not touch the object at all. It is in
+# git so that `infra/kubernetes/apply.sh` keeps it, and so a Deployment recreated from the manifest
+# is not silently missing it. When `set image` is retired and Flux owns these Deployments, this
+# stops being a hand-applied thing.
+#
+# ⚠️ IT RESTARTS PODS, WHICH IS THE POINT AND ALSO THE RISK. A ConfigMap edit now rolls the tier
+# that reads it. Two things make that safe rather than alarming: the web Deployments carry
+# `maxUnavailable: 0` with a readiness probe, so a roll serves throughout; and Reloader compares
+# CONTENT, not resourceVersion, so Flux re-applying an identical ConfigMap every ten minutes does
+# NOT roll anything. A restart means a value genuinely moved.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: reloader
+  namespace: monitoring
+  labels:
+    app: reloader
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: reloader
+  labels:
+    app: reloader
+rules:
+  # WATCH the config it reacts to. `secrets` is included because envFrom can name one and a
+  # partial view would mean silently missing a restart -- but note what this grants: Reloader can
+  # READ the worker secrets. That is a real grant and the reason it is spelled out rather than
+  # pasted: it hashes values to detect change, it never logs or exposes them, and it is the one
+  # component here with that reach. If that trade stops being acceptable, the narrower option is
+  # `configmaps` only, accepting that a secret rotation then needs a manual roll.
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    verbs: ["list", "get", "watch"]
+
+  # WRITE the workloads that consume it. `update` is required and `patch` alone is not enough --
+  # tried, and Reloader fails with `cannot update resource "deployments"`: it does a
+  # read-modify-write of the whole object, not a JSON patch.
+  #
+  # ⚠️ THAT MEANS A THEORETICAL RACE WITH CI, stated because the alternative is discovering it.
+  # Reloader reads the Deployment, adds an annotation and writes the whole thing back, so a
+  # `kubectl set image` landing between its read and its write would be overwritten by the older
+  # image. The window is milliseconds and both events are rare, but it is not zero, and it is a
+  # second reason to want `set image` retired in favour of image automation.
+  - apiGroups: ["apps"]
+    resources: ["deployments", "daemonsets", "statefulsets"]
+    verbs: ["list", "get", "watch", "update", "patch"]
+
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: reloader
+  labels:
+    app: reloader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: reloader
+subjects:
+  - kind: ServiceAccount
+    name: reloader
+    namespace: monitoring
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reloader
+  namespace: monitoring
+  labels:
+    app: reloader
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: reloader
+  template:
+    metadata:
+      labels:
+        app: reloader
+    spec:
+      serviceAccountName: reloader
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+      containers:
+        - name: reloader
+          # Pinned, like every other image in this directory that CI does not manage.
+          image: ghcr.io/stakater/reloader:v1.0.28
+          args:
+            # Restart by annotating the pod template, which is what makes this compose with CI:
+            # `kubectl set image` writes a different field of the same object.
+            - "--reload-strategy=annotations"
+          resources:
+            requests:
+              cpu: "10m"
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
