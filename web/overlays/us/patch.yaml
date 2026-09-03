@@ -11,7 +11,7 @@ data:
   # rendering the same `web` binary as the Polish site. SINGULAR -- the worker's variable is
   # KINOWO_COUNTRIES.
   KINOWO_COUNTRY: "us"
-  # HEAP: 768m, double the base's 384m, and the US is the only country that needs it.
+  # HEAP: 1024m, against the base's 384m, and the US is the only country that needs it.
   #
   # The base sizing assumes a page is bounded by "one city's films", which holds for
   # a Polish city or a UK county but NOT for a US state: California is ONE city with
@@ -21,12 +21,29 @@ data:
   # `pekko.jvm-exit-on-fatal-error` is on, the JVM exits rather than limping, so the
   # symptom users see is a 502 while the container restarts.
   #
+  # 768m BOUGHT TIME, NOT ROOM. Measured over the 5 days Prometheus has held since
+  # the 2026-08-29 cutover, G1 Old Gen on this pod peaks at 760.5 MiB against the
+  # 768 MiB cap -- 99% of the whole heap is LIVE tenured data, leaving nothing for
+  # young-gen allocation, and it averages 526.8 MiB (68.6%) even at rest. Every other
+  # web pod's old gen sits at 40-94% of a 384m cap. Meanwhile RSS peaks at 1515 MiB
+  # of the 2048 MiB limit, so 533 MiB of the container was being paid for and never
+  # reached: the heap was the binding constraint, exactly as it was for worker-us on
+  # 2026-09-03. 1024m takes the old-gen peak to ~74% and RSS to ~1771 MiB (86% of the
+  # limit) -- headroom, no longer generous, and the request is untouched so the node
+  # budget is unchanged.
+  #
+  # A cheaper fix exists and is NOT done here: a heap dump of worker-us showed 66.7%
+  # of all String payload is duplicate (5,874,828 byte[] holding 1,956,716 distinct
+  # values -- 'action' x66,106, 'PG-13' x30,315, '2D' x21,224), worth ~257 MiB to an
+  # intern cache over the genre/rating/format/cast vocabularies. That would help both
+  # tiers and every country, and could give this heap back.
+  #
   # Everything else is the base's string verbatim; a ConfigMap patch replaces the
   # whole key, so it has to be restated rather than appended to. Non-heap is
   # unchanged (160m metaspace + 96m code cache + 64m direct), which is what sets the
-  # 2Gi limit below: 768 + 320 + JVM overhead sits comfortably inside it.
+  # 2Gi limit below: 1024 + 320 + JVM overhead sits inside it.
   JAVA_OPTS: >-
-    -Xms768m -Xmx768m -XX:+UseG1GC -XX:MaxGCPauseMillis=50 -XX:+UseStringDeduplication -XX:ReservedCodeCacheSize=96m -XX:MaxMetaspaceSize=160m -XX:MaxDirectMemorySize=64m
+    -Xms1024m -Xmx1024m -XX:+UseG1GC -XX:MaxGCPauseMillis=50 -XX:+UseStringDeduplication -XX:ReservedCodeCacheSize=96m -XX:MaxMetaspaceSize=160m -XX:MaxDirectMemorySize=64m
 ---
 apiVersion: apps/v1
 kind: Deployment
