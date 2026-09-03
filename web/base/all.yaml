@@ -60,10 +60,6 @@ data:
   # OOM-crash-looped once the MovieCache grew past a few cities, and the repeated JVM cold-starts
   # read as "high load" rather than as the OOM they were. Re-tuning it is a separate change from
   # moving the process.
-  # ONE dump, not the image default of three. A dump is roughly the live set, and web's
-  # largest is ~600MiB — three would be 1.8GiB against the 2Gi emptyDir below, and an
-  # emptyDir over its sizeLimit EVICTS THE POD. One is what anybody reads anyway.
-  HEAPDUMP_KEEP: "1"
   JAVA_OPTS: >-
     -Xms384m -Xmx384m -XX:+UseG1GC -XX:MaxGCPauseMillis=50 -XX:+UseStringDeduplication -XX:ReservedCodeCacheSize=96m -XX:MaxMetaspaceSize=160m -XX:MaxDirectMemorySize=64m -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log
 ---
@@ -154,8 +150,8 @@ spec:
       # on 2026-09-03 and left NOTHING behind, because the web tier had no dump
       # flags and nowhere to put a dump if it had.
       #
-      # Bounded on both sides: `HEAPDUMP_KEEP=1` above caps how many dumps survive a
-      # boot, and `sizeLimit` caps the volume itself.
+      # Bounded on both sides: the image keeps exactly one dump and only while it fits in
+      # half the volume, and `sizeLimit` caps the volume itself.
       volumes:
       - name: data
         emptyDir:
