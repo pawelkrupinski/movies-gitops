@@ -1,0 +1,116 @@
+# Headlamp's identity, and the exact set of objects it may read.
+#
+# ------------------------------------------------------------------------------------------------
+# THE GRANT IS THE INTERESTING PART OF THIS FILE, NOT THE DEPLOYMENT
+# ------------------------------------------------------------------------------------------------
+#
+# Headlamp is a general Kubernetes UI, and upstream's manifest binds it to `cluster-admin` so that
+# every button in it works. That is the wrong default here for the same reason kube-state-metrics
+# does not get `secrets`: a UI reached over the network should not be a step towards the production
+# Mongo credential, the scraper API keys or the Telegram bot token, all of which live in
+# `kinowo/worker-*-secrets`, nor towards `kinowo/ghcr-pull`.
+#
+# So this is a READ-ONLY grant with `secrets` deliberately absent. `view` (the built-in ClusterRole)
+# would have been the obvious shortcut and is NOT used: it is a moving target defined by the
+# distribution rather than by this file, and on some versions it includes more than it reads like.
+# Naming the resources here means the grant is auditable by reading one page.
+#
+# WHAT THAT COSTS, STATED PLAINLY so nobody reports it as a bug:
+#
+#   - No exec into a pod, no port-forward from the UI, no deleting or scaling anything.
+#   - No editing YAML in the browser -- objects render, the Save button will fail.
+#   - Secrets appear in listings by name only where the API includes them in owner references;
+#     their VALUES are unreachable, which is the point.
+#
+# Everything the UI is actually wanted for -- which nodes exist, are they Ready, what is scheduled
+# where, which pods are restarting, container logs, events -- is here. `pods/log` is the one grant
+# that goes past plain object metadata, and it earns it: "why is this pod unhealthy" is unanswerable
+# without it, and logs from these workloads carry no credential (the app redacts URL credentials --
+# see services.RedactedUrl).
+#
+# TO MAKE IT A MANAGEMENT UI LATER is a deliberate second decision, not a tweak: bind a second,
+# narrower Role for the verbs wanted (say `patch` on Deployments in `kinowo`) rather than widening
+# this one to `*`. The blast radius of this ServiceAccount should stay legible.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: headlamp
+  namespace: monitoring
+  labels:
+    app: headlamp
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: headlamp-read
+  labels:
+    app: headlamp
+rules:
+  # Core objects the cluster view is built from. `secrets` is absent by choice -- see the header.
+  - apiGroups: [""]
+    resources:
+      - nodes
+      - namespaces
+      - pods
+      - services
+      - endpoints
+      - events
+      - configmaps
+      - persistentvolumes
+      - persistentvolumeclaims
+      - replicationcontrollers
+      - serviceaccounts
+      - limitranges
+      - resourcequotas
+    verbs: ["get", "list", "watch"]
+
+  # Container logs. The one grant beyond object metadata, and the reason the UI is worth having.
+  - apiGroups: [""]
+    resources: ["pods/log", "pods/status", "nodes/status"]
+    verbs: ["get", "list"]
+
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+    verbs: ["get", "list", "watch"]
+
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch"]
+
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses", "networkpolicies"]
+    verbs: ["get", "list", "watch"]
+
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["get", "list", "watch"]
+
+  # So the UI can say what THIS token may do, rather than rendering buttons that 403.
+  - apiGroups: ["authorization.k8s.io"]
+    resources: ["selfsubjectaccessreviews", "selfsubjectrulesreviews"]
+    verbs: ["create"]
+
+  # Present only if metrics-server is installed; harmless when the API group does not exist.
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["nodes", "pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: headlamp-read
+  labels:
+    app: headlamp
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: headlamp-read
+subjects:
+  - kind: ServiceAccount
+    name: headlamp
+    namespace: monitoring

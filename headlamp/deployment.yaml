@@ -1,0 +1,151 @@
+# Headlamp: a Kubernetes UI for this cluster. Nodes, workloads, pod health, logs, events.
+#
+# ------------------------------------------------------------------------------------------------
+# WHY THIS AND NOT ARGO CD, WHICH ALSO SHIPS A UI
+# ------------------------------------------------------------------------------------------------
+#
+# Argo CD's UI is better -- its live-vs-desired diff is the thing this cluster most lacks -- and it
+# does not fit. Measured 2026-09-03: k3s-worker-1 is at 81% CPU and 82% memory REQUESTED, and
+# NodeMemoryBudgetSpec leaves 256Mi of ledger spare once the web tier's rolling surge pod is
+# counted. Argo's five components want 1-2Gi. monitoring-1 has the room on paper and is the wrong
+# box on purpose: it carries the control-plane taint, holds etcd, and runs Prometheus and Grafana
+# as host services outside pod accounting -- so an OOM there takes out the control plane and the
+# only view of the fleet together, which is precisely when it is needed.
+#
+# Headlamp is one container at 128Mi. It fits in the 512Mi system reserve that today holds only
+# kube-state-metrics' 64Mi, so it costs the ledger nothing.
+#
+# ------------------------------------------------------------------------------------------------
+# IT IS NOT PUBLISHED, AND THAT IS THE DEFAULT ON PURPOSE
+# ------------------------------------------------------------------------------------------------
+#
+# `ClusterIP`, not the NodePort kube-state-metrics uses. roles/public-proxy.nix states the rule this
+# follows: "the proxy adds TLS and a name, not authentication", which is why Grafana -- the one
+# service that authenticates its own users -- is the only thing published. A Kubernetes UI behind
+# that proxy and nothing else would be cluster-wide read on the open internet.
+#
+# Reach it, today, with a port-forward over the same ssh tunnel that reaches the API:
+#
+#   ssh -fN -L 16443:127.0.0.1:6443 root@<monitoring-1>
+#   kubectl -n monitoring port-forward svc/headlamp 8080:80     # then http://localhost:8080
+#
+# TO PUBLISH IT LATER, the decision to make first is authentication, not the vhost. Headlamp does
+# not serve anonymously -- in-cluster it asks for a bearer token, so an exposed instance is not
+# open. But a token prompt on the public internet is a credential-stuffing target and a token in a
+# password manager is a credential that never rotates, so the answer is OIDC (this project already
+# runs a Google client for the app) rather than the built-in prompt. Add the vhost in the same
+# change as the OIDC config, never before it.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: headlamp
+  namespace: monitoring
+  labels:
+    app: headlamp
+spec:
+  replicas: 1
+  # RECREATE, not RollingUpdate. A rolling update of a single-replica Deployment briefly wants two
+  # pods, and on this node the spare is measured in hundreds of mebibytes reserved for the web
+  # tier's own surge. A UI that is down for fifteen seconds during its own upgrade costs nothing;
+  # a UI that makes a web rollout sit Pending costs the public tier.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: headlamp
+  template:
+    metadata:
+      labels:
+        app: headlamp
+    spec:
+      serviceAccountName: headlamp
+      # monitoring-1 carries the control-plane taint and is not tolerated here, so this lands on
+      # k3s-worker-1 by ordinary scheduling. Said rather than assumed, because "it happened to
+      # schedule where I wanted" is not a placement decision.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        fsGroup: 101
+      containers:
+        - name: headlamp
+          # PINNED, not `latest`. Unlike the app tiers there is no CI `set image` for this one, so
+          # the tag here IS what runs -- see infra/kubernetes/apply.sh for the trap that rule comes
+          # from. Bumping it is an edit to this line and an apply.
+          image: ghcr.io/headlamp-k8s/headlamp:v0.45.0
+          args:
+            - "-in-cluster"
+            - "-plugins-dir=/headlamp/plugins"
+          ports:
+            - name: http
+              containerPort: 4466
+          resources:
+            requests:
+              cpu: "25m"
+              memory: 128Mi
+            limits:
+              # No CPU limit, matching the rest of this fleet: throttling a UI's render to save a
+              # core it is not otherwise using trades latency for nothing.
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: plugins
+              mountPath: /headlamp/plugins
+            # `readOnlyRootFilesystem` above is kept, so every path the process writes to has to be
+            # a mount. Headlamp wants two beyond its plugin dir and says so by CRASHING on boot
+            # rather than degrading: `mkdir /home/headlamp/.config: read-only file system` and
+            # `Failed to create static dir: mkdir /tmp/.headlamp<n>`. Both are scratch -- config it
+            # rewrites each start, and a temp dir for the unpacked frontend -- so they are emptyDirs
+            # and not persistence.
+            - name: config
+              mountPath: /home/headlamp/.config
+            - name: tmp
+              mountPath: /tmp
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 4
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+      volumes:
+        # `readOnlyRootFilesystem` above means the plugin directory has to be a writable mount even
+        # when empty, or the container refuses to start.
+        - name: plugins
+          emptyDir:
+            sizeLimit: 64Mi
+        - name: config
+          emptyDir:
+            sizeLimit: 16Mi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: headlamp
+  namespace: monitoring
+  labels:
+    app: headlamp
+spec:
+  # ClusterIP -- deliberately unreachable from outside the cluster. See the header.
+  type: ClusterIP
+  selector:
+    app: headlamp
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
