@@ -61,7 +61,7 @@ data:
   # read as "high load" rather than as the OOM they were. Re-tuning it is a separate change from
   # moving the process.
   JAVA_OPTS: >-
-    -Xms384m -Xmx384m -XX:+UseG1GC -XX:MaxGCPauseMillis=50 -XX:+UseStringDeduplication -XX:ReservedCodeCacheSize=96m -XX:MaxMetaspaceSize=160m -XX:MaxDirectMemorySize=64m
+    -Xms384m -Xmx384m -XX:+UseG1GC -XX:MaxGCPauseMillis=50 -XX:+UseStringDeduplication -XX:ReservedCodeCacheSize=96m -XX:MaxMetaspaceSize=160m -XX:MaxDirectMemorySize=64m -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -139,6 +139,23 @@ spec:
           periodSeconds: 30
           timeoutSeconds: 10
           failureThreshold: 4
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      # SCRATCH, not durable — deliberately an emptyDir and not the workers' PVC.
+      # An OOM here restarts the CONTAINER, not the pod, and an emptyDir outlives
+      # a container restart, so the dump written on the way down is still there to
+      # read afterwards. It is lost when the pod is replaced, which is the right
+      # trade for forensics nobody wants to pay a per-pod volume for: web-us OOMed
+      # on 2026-09-03 and left NOTHING behind, because the web tier had no dump
+      # flags and nowhere to put a dump if it had.
+      #
+      # `sizeLimit` because the image's boot-prune keeps the 3 newest dumps and a
+      # dump is roughly the live set — ~700 MiB on web-us, far less elsewhere.
+      volumes:
+      - name: data
+        emptyDir:
+          sizeLimit: 2Gi
 ---
 apiVersion: v1
 kind: Service
