@@ -1,3 +1,25 @@
+# COUNTRY-AGNOSTIC BASE. Everything here is true of the PL, DE and UK workers alike; anything
+# that differs between them lives in overlays/<country>/ and nowhere else.
+#
+# WHAT DELIBERATELY IS NOT HERE, because getting it wrong merges three corpora into one:
+#
+#   KINOWO_COUNTRIES  the ONE value that distinguishes the three, and also what picks the
+#                     database -- Country.mongoDb derives the name from the country. Which is
+#                     why MONGODB_DB IS NEVER SET ANYWHERE, in the base or an overlay: setting
+#                     it would pin every country to a single database.
+#   the scrape levers KINOWO_SCRAPE_FRESHNESS_MINUTES and KINOWO_SCRAPE_TASKS_PER_VENUE are the
+#                     dominant write-rate controls and the three corpora are not alike. The
+#                     values in the overlays are carried from the Fly deployment, where they
+#                     were arrived at against real load rather than guessed.
+#   JAVA_OPTS         DE runs a 640m heap against PL and UK's 448m, for a larger corpus.
+#   nodePort          one fixed port each, because prometheus.yaml names them.
+#
+# ⚠️ NO LEADING `---` BELOW, ON PURPOSE. image-automation-controller rewrites this file when it
+# deploys, through kustomize's YAML round-trip -- and that round-trip keeps comments ATTACHED TO A
+# NODE while silently dropping any that float before the first document. With a `---` here, this
+# whole header was a detached prefix rather than the first node's head comment, and the first two
+# automated deploys deleted it outright (decff51a9 for the worker, f32d34f89 for web) with nothing
+# red to say so. Removing the separator is what makes the header survive; do not put it back.
 apiVersion: v1
 kind: Namespace
 metadata:

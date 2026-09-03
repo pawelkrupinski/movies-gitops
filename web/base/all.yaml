@@ -1,3 +1,27 @@
+# COUNTRY-AGNOSTIC BASE for the WEB (serving) tier. Everything here is true of the PL, DE and UK
+# web deployments alike; anything that differs lives in overlays/<country>/ and nowhere else.
+#
+# HOW THIS DIFFERS FROM THE WORKER, which is the sibling directory and otherwise the same shape:
+#
+#   KINOWO_COUNTRY    SINGULAR, not KINOWO_COUNTRIES. The two tiers name their country through
+#                     different variables (see Country.soleFromEnv) and getting this wrong hands
+#                     the process the Poland default -- an English site serving Polish cinemas.
+#   no PVC            web is stateless. The worker's /data holds heap dumps, logs and an AppCDS
+#                     archive; web keeps nothing across a restart.
+#   RollingUpdate     the worker is `Recreate` because two of them would double-write one corpus.
+#                     Web is read-only, so replicas are safe -- and this tier is the only thing
+#                     users see, so a deploy must never take it fully down. maxUnavailable: 0
+#                     means the new pod must pass its readiness probe BEFORE the old one goes.
+#   readinessProbe    the worker has none: nothing routes to it. Here it is what makes the
+#                     rolling update honest -- without it the Service starts sending traffic to a
+#                     JVM that is still building its MovieCache, which is a ~30s window of 503s.
+#
+# ⚠️ NO LEADING `---` BELOW, ON PURPOSE. image-automation-controller rewrites this file when it
+# deploys, through kustomize's YAML round-trip -- and that round-trip keeps comments ATTACHED TO A
+# NODE while silently dropping any that float before the first document. With a `---` here, this
+# whole header was a detached prefix rather than the first node's head comment, and the first two
+# automated deploys deleted it outright (decff51a9 for the worker, f32d34f89 for web) with nothing
+# red to say so. Removing the separator is what makes the header survive; do not put it back.
 apiVersion: v1
 kind: Namespace
 metadata:
