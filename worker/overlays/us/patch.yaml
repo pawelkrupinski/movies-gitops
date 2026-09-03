@@ -43,12 +43,17 @@ data:
 
   # Identical to the other countries except the heap, which is the largest in the fleet: DE needed
   # 640m for 1,529 venues and this roster is ~3x that, so the scrape queue, the freshness store
-  # and the corpus of live slots all scale with it. 1024m + ~290 MB non-heap leaves headroom
-  # inside the 2Gi below. SerialGC and a pinned heap are carried from Fly verbatim -- they were the
+  # and the corpus of live slots all scale with it. 1024m was NOT enough: on 2026-09-03T03:40 the
+  # JVM died with `OutOfMemoryError: Java heap space` after ~7h, while the cgroup peaked at 1.3G of
+  # the 2Gi below — the heap, not the limit, was the binding constraint, so the container was never
+  # OOM-killed and raising the limit would have changed nothing. 1280m + ~290 MB non-heap still
+  # leaves ~220 MB inside the 2Gi, which NodeMemoryBudgetSpec checks both ways.
+  #
+  # SerialGC and a pinned heap are carried from Fly verbatim -- they were the
   # fix for an OOM-restart loop under G1, and re-tuning them is a separate change from adding a
   # country.
   JAVA_OPTS: >-
-    -Xms1024m -Xmx1024m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:+AutoCreateSharedArchive -XX:SharedArchiveFile=/data/app.jsa -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
+    -Xms1280m -Xmx1280m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:+AutoCreateSharedArchive -XX:SharedArchiveFile=/data/app.jsa -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
 ---
 apiVersion: apps/v1
 kind: Deployment
