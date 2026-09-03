@@ -1,0 +1,160 @@
+# Retiring `kubectl set image`: the registry pin moves into git, and one mechanism owns the cluster.
+#
+# ------------------------------------------------------------------------------------------------
+# WHAT THIS REPLACES, AND WHY THE OLD SHAPE HAD TO GO
+# ------------------------------------------------------------------------------------------------
+#
+# Until this existed, a deploy was CI opening an ssh connection and saying "run this image"
+# (roles/k8s-deploy.nix). That worked, but it split ownership of the cluster in two: Flux owned
+# every object except the one that decides what code runs, and the app Deployments had to be
+# excluded from reconciliation with `kustomize.toolkit.fluxcd.io/reconcile: disabled` so the two
+# would not fight. The cost of that exclusion was that a Deployment change -- a probe, a resource
+# limit, a rollout strategy -- was reconciled for nobody, which is the same class of drift that
+# caused the 2026-09-03 outage for ConfigMaps.
+#
+# Now the running image is a FACT IN GIT. image-reflector-controller watches the registry,
+# image-automation-controller writes the winning tag back into the manifests below, and
+# kustomize-controller rolls it out like any other change. `git log` on the manifest is the deploy
+# history, and reverting a bad deploy is `git revert`.
+#
+# ------------------------------------------------------------------------------------------------
+# ⚠️ THE CREDENTIAL TRADE THIS MAKES -- READ BEFORE CHANGING IT
+# ------------------------------------------------------------------------------------------------
+#
+# The old design's best property was that CI held a key that could ONLY name an image to a forced
+# command, and the cluster held nothing that reached GitHub. This inverts that: CI now holds
+# nothing, and the cluster holds a key that can PUSH TO main. Anyone who can read Secrets in
+# flux-system can push code to this repository, so:
+#
+#   - it is a repo-scoped DEPLOY KEY, not a personal access token: it reaches exactly this
+#     repository, is revocable on its own, and is not tied to anybody's account;
+#   - Headlamp's ClusterRole deliberately withholds `secrets` (infra/kubernetes/headlamp/rbac.yaml),
+#     so the cluster UI cannot read it;
+#   - the SECRET IS NOT IN GIT and must never be. It is applied out of band, exactly like
+#     gotk-components.yaml. Recreate it with:
+#         flux create secret git flux-git-write \
+#           --url=ssh://git@github.com/pawelkrupinski/movies --ssh-key-algorithm=ed25519
+#     then add the printed public key at Settings -> Deploy keys with "Allow write access".
+#
+# ⚠️ TWO GitRepositories ON PURPOSE. The `movies` source in gotk-sync.yaml keeps reading over
+# ANONYMOUS https, because the repository is public and config reconciliation should not depend on
+# a credential that can be revoked. Only the automation below uses the authenticated ssh source, so
+# revoking or breaking the deploy key stops DEPLOYS and leaves config reconciliation working --
+# and it fails loudly rather than silently, because the automation reports NotReady.
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: movies-write
+  namespace: flux-system
+spec:
+  interval: 5m
+  # ssh, not https, because this is the one that has to PUSH. The secret carries `identity`,
+  # `identity.pub` and `known_hosts`; a missing known_hosts is the usual first failure and reads as
+  # "host key verification failed" in the automation's events.
+  url: ssh://git@github.com/pawelkrupinski/movies
+  secretRef:
+    name: flux-git-write
+  ref:
+    branch: main
+  ignore: |
+    /*
+    !/infra/kubernetes/
+---
+# ------------------------------------------------------------------------------------------------
+# WHAT "NEWEST" MEANS, which is the whole difficulty of image automation
+# ------------------------------------------------------------------------------------------------
+#
+# A policy has to ORDER the tags to pick a winner, and the two tags this repo pushed for years
+# cannot be ordered: a commit SHA is random, and `latest` is one name that keeps moving. So
+# .github/workflows/main.yml now also pushes `main-<utc timestamp>-<sha7>`, and these policies
+# extract the timestamp and take the numerical maximum.
+#
+# ⚠️ The pattern is ANCHORED and the timestamp width is FIXED. A loose pattern is how image
+# automation deploys something absurd: `latest` sorting above every real tag, or a branch build
+# winning because it happened to match. Anything that is not exactly this shape is ignored.
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImageRepository
+metadata:
+  name: movies-web
+  namespace: flux-system
+spec:
+  image: ghcr.io/pawelkrupinski/movies-web
+  # Five minutes, matching the config source: this is the floor on how long a green build waits
+  # before it is live, and the registry call is cheap.
+  interval: 5m
+---
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImagePolicy
+metadata:
+  name: movies-web
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: movies-web
+  filterTags:
+    pattern: '^main-(?P<ts>[0-9]{14})-[0-9a-f]{7}$'
+    extract: '$ts'
+  policy:
+    numerical:
+      order: asc
+---
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImageRepository
+metadata:
+  name: movies-worker
+  namespace: flux-system
+spec:
+  image: ghcr.io/pawelkrupinski/movies-worker
+  interval: 5m
+---
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImagePolicy
+metadata:
+  name: movies-worker
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: movies-worker
+  filterTags:
+    pattern: '^main-(?P<ts>[0-9]{14})-[0-9a-f]{7}$'
+    extract: '$ts'
+  policy:
+    numerical:
+      order: asc
+---
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImageUpdateAutomation
+metadata:
+  name: movies
+  namespace: flux-system
+spec:
+  interval: 5m
+  sourceRef:
+    kind: GitRepository
+    name: movies-write
+  git:
+    checkout:
+      ref:
+        branch: main
+    commit:
+      author:
+        name: flux-image-automation
+        email: flux@kinowo.net
+      # ⚠️ `[skip ci]` IS LOAD-BEARING. Without it every deploy commit starts a full CI run, which
+      # builds an image, which produces a newer tag, which produces another commit -- a loop that
+      # never settles and burns the runner budget. GitHub honours the marker on push events.
+      # Deliberately a STATIC message with no template expressions. The templating context differs
+      # between controller versions, and a template that fails to evaluate stops deploys with an
+      # error that looks nothing like its cause. The diff already says which image moved.
+      messageTemplate: |
+        Roll the cluster onto the image CI just built
+
+        [skip ci]
+    push:
+      branch: main
+  update:
+    # Scoped to the manifests, so the automation can only ever rewrite a marked image line. The
+    # markers are the `# {"$imagepolicy": "flux-system:<policy>"}` comments in web/ and worker/.
+    path: ./infra/kubernetes
+    strategy: Setters

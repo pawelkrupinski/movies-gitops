@@ -75,7 +75,16 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
       - name: worker
-        image: ghcr.io/pawelkrupinski/movies-worker:latest
+        # ⚠️ THIS LINE IS WRITTEN BY A MACHINE. The trailing marker makes it a kustomize
+        # "setter": image-automation-controller finds the newest tag matching the
+        # ImagePolicy named here and commits the change to this file, which is how a build
+        # becomes a deploy (infra/kubernetes/image-automation/automation.yaml). Editing the tag by
+        # hand works and is the way to pin or roll back, but the automation will move it
+        # forward again at its next run unless the ImageUpdateAutomation is suspended.
+        #
+        # NOT `latest`, ever: a pod restarting under a moving tag can come back on a
+        # different build with nothing recording which. The value below is a real build.
+        image: ghcr.io/pawelkrupinski/movies-worker:b5af6c9f17c2a2b42bff9066db3507f296ebb257 # {"$imagepolicy": "flux-system:movies-worker"}
         imagePullPolicy: IfNotPresent
         envFrom:
         - configMapRef:
