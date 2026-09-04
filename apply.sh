@@ -14,9 +14,9 @@
 # country, a Deployment named `<tier>-<cc>` whose container is named `<tier>` -- so the tier is an
 # argument rather than a second copy of this file to keep in step.
 #
-#   infra/kubernetes/apply.sh web pl                     # keep the running image
-#   infra/kubernetes/apply.sh worker de <full-image-ref> # apply and move to a specific build
-#   infra/kubernetes/apply.sh web all                    # every country, each keeping its own pin
+#   apply.sh web pl                     # keep the running image
+#   apply.sh worker de <full-image-ref> # apply and move to a specific build
+#   apply.sh web all                    # every country, each keeping its own pin
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

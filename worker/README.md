@@ -60,7 +60,7 @@ ssh -i <k8sdeploy key> k8sdeploy@128.140.49.167 ghcr.io/pawelkrupinski/movies-wo
 
 # Structural changes (not just the image) go through the shared apply.sh, which preserves the
 # pinned image. It takes the TIER first, because the web deployments use the same script:
-infra/kubernetes/apply.sh worker all
+apply.sh worker all
 ```
 
 Always pin the SHA. `latest` exists only so a hand-applied manifest resolves to something; a pod

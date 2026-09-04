@@ -26,7 +26,7 @@
 # minutes and reverted production to whatever `latest` happened to be, forever.
 #
 # What made the exclusion unnecessary was moving the pin INTO the repository. image-automation
-# writes the winning tag straight into the base manifests (infra/kubernetes/image-automation/), so
+# writes the winning tag straight into the base manifests (image-automation/), so
 # git and the cluster no longer disagree about what should be running and there is nothing left to
 # fight over. `kubectl set image` is gone from main.yml, and with it the reason CI ever needed a
 # credential that could change production.
@@ -39,7 +39,7 @@
 # ⚠️ WHAT NOW STANDS BETWEEN A BROKEN DEPLOY AND SILENCE. A CI job that fails is loud. Four
 # controllers that quietly stop are not, and the result is the cluster serving its last image
 # indefinitely while every run stays green. So this switch was made only after Flux itself became
-# watched: infra/kubernetes/flux-metrics/ publishes the controllers' metrics and
+# watched: flux-metrics/ publishes the controllers' metrics and
 # nix/files/monitoring/rules/flux.rules alerts on a stalled deploy path, a suspended automation and
 # a dead controller. Do not weaken one without the other.
 #
@@ -48,10 +48,24 @@
 # bad component version can break the thing that would have rolled it back, so gotk-components.yaml
 # is applied by hand and upgrading Flux is a re-apply. Revisit at stage 3.
 #
-# NO GIT CREDENTIAL, because github.com/pawelkrupinski/movies is public. Nothing to rotate, nothing
-# to leak, and the cluster holds no token that reaches the repository. If the repo is ever made
-# private this file needs a `secretRef` and a read-only deploy key, and the reconciliation will
-# fail loudly (not silently) in the meantime.
+# NO GIT CREDENTIAL ON THIS SOURCE, because pawelkrupinski/movies-gitops is public. Nothing to
+# rotate, nothing to leak, and reading config does not depend on a key anyone can revoke. The
+# authenticated source is a SEPARATE one — `movies-write` in image-automation/automation.yaml,
+# which needs a deploy key because it pushes. Keeping them apart is deliberate: revoking that key
+# stops DEPLOYS and leaves config reconciliation working, and it fails loudly rather than silently.
+# If this repository is ever made private, this file needs a `secretRef` and a read-only key too.
+#
+# ------------------------------------------------------------------------------------------------
+# WHY THIS IS ITS OWN REPOSITORY
+# ------------------------------------------------------------------------------------------------
+#
+# It used to be `infra/kubernetes/` inside pawelkrupinski/movies, and Flux pulled the whole thing.
+# Measured before the split: a shallow single-branch clone of that repository is 93.5 seconds,
+# 228 MB of .git and a 1.3 GB working tree of 18,806 files — to reach 420 KB of manifests in 36 of
+# them. The same clone here is 2.2 seconds and 616 KB.
+#
+# That was tolerable while Flux only read. It stopped being tolerable when image-automation began
+# COMMITTING the deployed tag, because that clone now happens on the write path of every deploy.
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository
@@ -62,14 +76,9 @@ spec:
   # Five minutes: fast enough that a hand-applied hotfix is reverted-or-confirmed within one coffee,
   # slow enough that a public clone of a repository this size is not a background job.
   interval: 5m
-  url: https://github.com/pawelkrupinski/movies
+  url: https://github.com/pawelkrupinski/movies-gitops
   ref:
     branch: main
-  # Only the paths below are ever read; the ~18k files of Scala are ignored so the artifact the
-  # source-controller keeps in memory stays small.
-  ignore: |
-    /*
-    !/infra/kubernetes/
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -81,7 +90,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: movies
-  path: ./infra/kubernetes/kube-state-metrics
+  path: ./kube-state-metrics
   # PRUNE ON. Flux deletes only what it created and still labels as its own, so this removes a
   # resource when its manifest leaves git — the half of reconciliation that a plain `apply` never
   # does, and the reason a deleted manifest currently leaves a live object behind.
@@ -99,7 +108,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: movies
-  path: ./infra/kubernetes/headlamp
+  path: ./headlamp
   prune: true
   wait: true
   timeout: 3m
@@ -114,7 +123,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: movies
-  path: ./infra/kubernetes/reloader
+  path: ./reloader
   prune: true
   wait: true
   timeout: 3m
@@ -132,13 +141,13 @@ spec:
   sourceRef:
     kind: GitRepository
     name: movies
-  path: ./infra/kubernetes/flux-metrics
+  path: ./flux-metrics
   prune: true
   wait: true
   timeout: 3m
 ---
 # The image-automation objects get a Kustomization of their own rather than riding along in
-# `./infra/kubernetes/flux`, because that directory also holds gotk-components.yaml -- pointing a
+# `./flux`, because that directory also holds gotk-components.yaml -- pointing a
 # reconciler at it would make Flux manage its own controllers, which this file's header
 # deliberately does not do yet ("a bad component version can break the thing that would have rolled
 # it back"). A separate directory keeps that choice intact while still letting the policies and the
@@ -153,7 +162,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: movies
-  path: ./infra/kubernetes/image-automation
+  path: ./image-automation
   prune: true
   wait: true
   timeout: 3m
@@ -168,7 +177,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: movies
-  path: ./infra/kubernetes/web/overlays/pl
+  path: ./web/overlays/pl
   # PRUNE STAYS OFF. Flux owns the Deployment now, but these paths predate it, and a prune sweep
   # deleting something nobody remembered was here is a sharp edge with no matching gain.
   prune: false
@@ -190,7 +199,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: movies
-  path: ./infra/kubernetes/web/overlays/de
+  path: ./web/overlays/de
   # PRUNE STAYS OFF. Flux owns the Deployment now, but these paths predate it, and a prune sweep
   # deleting something nobody remembered was here is a sharp edge with no matching gain.
   prune: false
@@ -212,7 +221,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: movies
-  path: ./infra/kubernetes/web/overlays/uk
+  path: ./web/overlays/uk
   # PRUNE STAYS OFF. Flux owns the Deployment now, but these paths predate it, and a prune sweep
   # deleting something nobody remembered was here is a sharp edge with no matching gain.
   prune: false
@@ -234,7 +243,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: movies
-  path: ./infra/kubernetes/web/overlays/us
+  path: ./web/overlays/us
   # PRUNE STAYS OFF. Flux owns the Deployment now, but these paths predate it, and a prune sweep
   # deleting something nobody remembered was here is a sharp edge with no matching gain.
   prune: false
@@ -256,7 +265,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: movies
-  path: ./infra/kubernetes/web/overlays/es
+  path: ./web/overlays/es
   # PRUNE STAYS OFF. Flux owns the Deployment now, but these paths predate it, and a prune sweep
   # deleting something nobody remembered was here is a sharp edge with no matching gain.
   prune: false
@@ -278,7 +287,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: movies
-  path: ./infra/kubernetes/worker/overlays/pl
+  path: ./worker/overlays/pl
   # PRUNE STAYS OFF. Flux owns the Deployment now, but these paths predate it, and a prune sweep
   # deleting something nobody remembered was here is a sharp edge with no matching gain.
   prune: false
@@ -300,7 +309,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: movies
-  path: ./infra/kubernetes/worker/overlays/de
+  path: ./worker/overlays/de
   # PRUNE STAYS OFF. Flux owns the Deployment now, but these paths predate it, and a prune sweep
   # deleting something nobody remembered was here is a sharp edge with no matching gain.
   prune: false
@@ -322,7 +331,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: movies
-  path: ./infra/kubernetes/worker/overlays/uk
+  path: ./worker/overlays/uk
   # PRUNE STAYS OFF. Flux owns the Deployment now, but these paths predate it, and a prune sweep
   # deleting something nobody remembered was here is a sharp edge with no matching gain.
   prune: false
@@ -344,7 +353,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: movies
-  path: ./infra/kubernetes/worker/overlays/us
+  path: ./worker/overlays/us
   # PRUNE STAYS OFF. Flux owns the Deployment now, but these paths predate it, and a prune sweep
   # deleting something nobody remembered was here is a sharp edge with no matching gain.
   prune: false
@@ -366,7 +375,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: movies
-  path: ./infra/kubernetes/worker/overlays/es
+  path: ./worker/overlays/es
   # PRUNE STAYS OFF. Flux owns the Deployment now, but these paths predate it, and a prune sweep
   # deleting something nobody remembered was here is a sharp edge with no matching gain.
   prune: false

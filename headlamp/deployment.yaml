@@ -72,7 +72,7 @@ spec:
       containers:
         - name: headlamp
           # PINNED, not `latest`. Unlike the app tiers there is no CI `set image` for this one, so
-          # the tag here IS what runs -- see infra/kubernetes/apply.sh for the trap that rule comes
+          # the tag here IS what runs -- see apply.sh for the trap that rule comes
           # from. Bumping it is an edit to this line and an apply.
           image: ghcr.io/headlamp-k8s/headlamp:v0.45.0
           args:

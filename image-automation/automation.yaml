@@ -28,12 +28,12 @@
 #
 #   - it is a repo-scoped DEPLOY KEY, not a personal access token: it reaches exactly this
 #     repository, is revocable on its own, and is not tied to anybody's account;
-#   - Headlamp's ClusterRole deliberately withholds `secrets` (infra/kubernetes/headlamp/rbac.yaml),
+#   - Headlamp's ClusterRole deliberately withholds `secrets` (headlamp/rbac.yaml),
 #     so the cluster UI cannot read it;
 #   - the SECRET IS NOT IN GIT and must never be. It is applied out of band, exactly like
 #     gotk-components.yaml. Recreate it with:
 #         flux create secret git flux-git-write \
-#           --url=ssh://git@github.com/pawelkrupinski/movies --ssh-key-algorithm=ed25519
+#           --url=ssh://git@github.com/pawelkrupinski/movies-gitops --ssh-key-algorithm=ed25519
 #     then add the printed public key at Settings -> Deploy keys with "Allow write access".
 #
 # ⚠️ TWO GitRepositories ON PURPOSE. The `movies` source in gotk-sync.yaml keeps reading over
@@ -52,14 +52,11 @@ spec:
   # ssh, not https, because this is the one that has to PUSH. The secret carries `identity`,
   # `identity.pub` and `known_hosts`; a missing known_hosts is the usual first failure and reads as
   # "host key verification failed" in the automation's events.
-  url: ssh://git@github.com/pawelkrupinski/movies
+  url: ssh://git@github.com/pawelkrupinski/movies-gitops
   secretRef:
     name: flux-git-write
   ref:
     branch: main
-  ignore: |
-    /*
-    !/infra/kubernetes/
 ---
 # ------------------------------------------------------------------------------------------------
 # WHAT "NEWEST" MEANS, which is the whole difficulty of image automation
@@ -156,5 +153,5 @@ spec:
   update:
     # Scoped to the manifests, so the automation can only ever rewrite a marked image line. The
     # markers are the `# {"$imagepolicy": "flux-system:<policy>"}` comments in web/ and worker/.
-    path: ./infra/kubernetes
+    path: ./
     strategy: Setters

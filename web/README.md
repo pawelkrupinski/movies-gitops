@@ -90,7 +90,7 @@ ssh -i <k8sdeploy key> k8sdeploy@128.140.49.167 ghcr.io/pawelkrupinski/movies-we
 
 # Structural changes (not just the image) go through the shared apply.sh, which preserves the
 # pinned image CI set:
-infra/kubernetes/apply.sh web all
+apply.sh web all
 ```
 
 Always pin the SHA. `latest` exists only so a hand-applied manifest resolves to something; a pod
