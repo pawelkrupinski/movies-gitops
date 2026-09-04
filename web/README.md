@@ -88,9 +88,10 @@ Deployments from the repository name, so `movies-web` rolls these four and nothi
 # CI does this automatically. By hand:
 ssh -i <k8sdeploy key> k8sdeploy@128.140.49.167 ghcr.io/pawelkrupinski/movies-web:<sha>
 
-# Structural changes (not just the image) go through the shared apply.sh, which preserves the
-# pinned image CI set:
-apply.sh web all
+# Structural changes reach the cluster by being merged to main; Flux applies them within
+# ten minutes. There is no apply script any more -- it existed only to stop a plain
+# `kubectl apply` reverting the image CI had pinned with `set image`, and neither of
+# those exists since the pin moved into this repository.
 ```
 
 Always pin the SHA. `latest` exists only so a hand-applied manifest resolves to something; a pod

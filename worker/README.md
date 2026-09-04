@@ -58,9 +58,10 @@ never restarts the worker). To roll a build out:
 # image reference -- there is no version of "deploy" that leaves two countries on an older build:
 ssh -i <k8sdeploy key> k8sdeploy@128.140.49.167 ghcr.io/pawelkrupinski/movies-worker:<sha>
 
-# Structural changes (not just the image) go through the shared apply.sh, which preserves the
-# pinned image. It takes the TIER first, because the web deployments use the same script:
-apply.sh worker all
+# Structural changes reach the cluster by being merged to main; Flux applies them within
+# ten minutes. There is no apply script any more -- it existed only to stop a plain
+# `kubectl apply` reverting the image CI had pinned with `set image`, and neither of
+# those exists since the pin moved into this repository.
 ```
 
 Always pin the SHA. `latest` exists only so a hand-applied manifest resolves to something; a pod

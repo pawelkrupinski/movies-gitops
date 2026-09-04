@@ -37,7 +37,7 @@
 # Deployments (gotk-sync.yaml) and CI only ever writes their image, so putting it in the manifest
 # does NOT deliver it -- it was applied once by hand, and it persists because nothing removes it:
 # `kubectl set image` leaves annotations alone and Flux does not touch the object at all. It is in
-# git so that `apply.sh` keeps it, and so a Deployment recreated from the manifest
+# git so that Flux keeps it, and so a Deployment recreated from the manifest
 # is not silently missing it. When `set image` is retired and Flux owns these Deployments, this
 # stops being a hand-applied thing.
 #
