@@ -71,9 +71,10 @@ spec:
         fsGroup: 101
       containers:
         - name: headlamp
-          # PINNED, not `latest`. Unlike the app tiers there is no CI `set image` for this one, so
-          # the tag here IS what runs -- see apply.sh for the trap that rule comes
-          # from. Bumping it is an edit to this line and an apply.
+          # PINNED, not `latest`. No ImagePolicy selects upstream Headlamp releases, so the tag here
+          # IS what runs and bumping it is an edit to this line. `latest` on a third-party image
+          # would additionally mean a pod restarting onto a version nobody chose, with nothing
+          # recording which.
           image: ghcr.io/headlamp-k8s/headlamp:v0.45.0
           args:
             - "-in-cluster"
