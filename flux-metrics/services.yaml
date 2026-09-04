@@ -99,3 +99,45 @@ spec:
       port: 8080
       targetPort: http-prom
       nodePort: 30084
+---
+# ⚠️ WITHOUT THIS, EVERY SERVICE ABOVE IS UNREACHABLE AND THE ALERTS WATCHING FLUX ARE THEMSELVES
+# DOWN. Found the day they were added, by the alert that was supposed to be the safety net:
+# `up{job="flux"}` was 0 on all four while the Services, their endpoints and kube-proxy's NodePort
+# rules were all perfectly correct.
+#
+# The cause is a policy Flux ships in gotk-components.yaml. Its `allow-scraping` admits port 8080
+# `from: [{namespaceSelector: {}}]` -- which reads as "anywhere" and means "any pod in any
+# namespace IN THIS CLUSTER". Prometheus is not in this cluster: it runs on monitoring-1, outside,
+# deliberately holding no kubeconfig. So every scrape was denied. kube-state-metrics is reachable
+# only because the `monitoring` namespace has no NetworkPolicy at all -- an absence of rules,
+# which is easy to mistake for a working pattern to copy.
+#
+# THIS IS AN ADDITION, NOT AN EDIT. NetworkPolicies union, so a second one granting what the first
+# omits is the whole fix -- and editing Flux's own policy would be undone by the next
+# `flux install` regeneration, silently, at an upgrade nobody would connect to this.
+#
+# BOTH CIDRs, and the second one is not laziness. NodePort traffic is masqueraded before it reaches
+# the pod, and the source the policy actually sees depends on the path the kernel picks: the fleet
+# subnet for traffic that arrives un-SNATed, or a pod-network address once kube-proxy has
+# masqueraded it. Naming both is what makes this work regardless, and it grants nothing new --
+# 10.42/16 is the pod network, which `allow-scraping` above already admits in full.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-scraping-from-the-fleet
+  namespace: flux-system
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        # The three Hetzner hosts on the private network, and nothing else -- the public interface
+        # is not in this range, so this does not expose metrics to the internet.
+        - ipBlock:
+            cidr: 10.20.0.0/24
+        - ipBlock:
+            cidr: 10.42.0.0/16
+      ports:
+        - port: 8080
+          protocol: TCP
