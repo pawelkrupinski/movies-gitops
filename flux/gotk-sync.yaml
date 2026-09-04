@@ -16,40 +16,32 @@
 # cluster to git makes that drift self-correcting instead of merely visible.
 #
 # ------------------------------------------------------------------------------------------------
-# ⚠️ WHY web AND worker ARE HERE WITH THEIR DEPLOYMENTS SWITCHED OFF
+# FLUX OWNS THE DEPLOYMENTS NOW, WHICH IT DID NOT AT FIRST
 # ------------------------------------------------------------------------------------------------
 #
-# Their manifests say `image: ghcr.io/pawelkrupinski/movies-{web,worker}:latest`, and CI pins a
-# commit SHA over the top with `kubectl set image`. Those two are already known to fight —
-# infra/kubernetes/apply.sh exists solely to read the running image, apply, and put it back.
+# For its first day here, every app Kustomization below carried a `patches` entry stamping
+# `kustomize.toolkit.fluxcd.io/reconcile: disabled` onto its Deployment. That was not squeamishness:
+# the manifests said `image: ...:latest` and CI pinned a commit SHA over the top with
+# `kubectl set image`, so a reconciler pointed at those paths would have won that fight every five
+# minutes and reverted production to whatever `latest` happened to be, forever.
 #
-# Point a reconciler at those paths and it wins that fight every five minutes: production reverts
-# to whatever `:latest` happens to be, with no record of which build that is, forever. That is
-# strictly worse than the drift this exists to fix.
+# What made the exclusion unnecessary was moving the pin INTO the repository. image-automation
+# writes the winning tag straight into the base manifests (infra/kubernetes/image-automation/), so
+# git and the cluster no longer disagree about what should be running and there is nothing left to
+# fight over. `kubectl set image` is gone from main.yml, and with it the reason CI ever needed a
+# credential that could change production.
 #
-# The answer is NOT to keep those paths out — the ConfigMap is exactly what drifted, and leaving
-# it unreconciled leaves the outage's cause in place. It is to reconcile the path and exclude the
-# one object that conflicts: each app Kustomization below carries a `patches` entry stamping
-# `kustomize.toolkit.fluxcd.io/reconcile: disabled` onto every Deployment, which tells
-# kustomize-controller to skip that object entirely. Flux owns the ConfigMap and the Service; CI
-# keeps the Deployment and its pinned image, exactly as today.
+# The exclusion had a real cost while it lasted, which is why it is worth recording that it is
+# gone: a Deployment change — a probe, a resource limit, a rollout strategy — was reconciled by
+# NOBODY. That is the same drift class as the ConfigMap gap that caused the 2026-09-03 outage,
+# sitting unnoticed inside the fix for it.
 #
-# WHY THIS AND NOT A MANIFEST SPLIT. Separating the ConfigMap into its own path was tried first
-# and is worse: kustomize refuses to load a patch from outside its own root, so the split needs a
-# second copy of each overlay's nameSuffix and labels, and a second place for the values to drift
-# against. This annotation needs no structural change at all — `kustomize build` output for every
-# overlay is byte-identical to before, which is the property that makes it safe to apply.
-#
-# ⚠️ A ConfigMap CHANGE DOES NOT RESTART PODS. Flux keeps the stored value correct; a running JVM
-# picks it up at its next roll, which on this fleet is ~13 deploys a day. That shrinks the stale
-# window from "until somebody notices" — three hours and an OOM, on 2026-09-03 — to "until the
-# next deploy". It does not eliminate it. Closing the last gap means either letting Flux own the
-# Deployment (blocked on retiring `set image`) or a restart-on-change controller.
-#
-# THE STAGE AFTER THIS: retire `set image` entirely. Flux's image-automation controllers watch the
-# registry and commit the new tag to git, so the pin lives in the repository, one mechanism owns
-# the cluster, and the annotation below comes off. That is the end state and the one that needs
-# the most care, so it is not being done in the same change.
+# ⚠️ WHAT NOW STANDS BETWEEN A BROKEN DEPLOY AND SILENCE. A CI job that fails is loud. Four
+# controllers that quietly stop are not, and the result is the cluster serving its last image
+# indefinitely while every run stays green. So this switch was made only after Flux itself became
+# watched: infra/kubernetes/flux-metrics/ publishes the controllers' metrics and
+# nix/files/monitoring/rules/flux.rules alerts on a stalled deploy path, a suspended automation and
+# a dead controller. Do not weaken one without the other.
 #
 # NOT SELF-MANAGED, deliberately. `flux bootstrap` would have Flux reconcile its own components
 # from git, which is the usual arrangement and the right one later. For a first install it means a
@@ -177,23 +169,16 @@ spec:
     kind: GitRepository
     name: movies
   path: ./infra/kubernetes/web/overlays/pl
-  # PRUNE OFF for the app tiers. Everything here predates Flux and is co-owned with CI; a prune
-  # sweep on a path whose Deployment is deliberately unmanaged is a sharp edge for no gain.
+  # PRUNE STAYS OFF. Flux owns the Deployment now, but these paths predate it, and a prune sweep
+  # deleting something nobody remembered was here is a sharp edge with no matching gain.
   prune: false
-  wait: false
+  # WAIT IS ON, AND IT IS WHAT MAKES A BAD DEPLOY VISIBLE. With it, a rollout that never becomes
+  # healthy leaves this Kustomization Ready=False, which flux.rules turns into an alert. Without
+  # it Flux reports success the moment it has applied the object, so a crash-looping image would
+  # be indistinguishable from a good one. The alert's `for: 30m` is what keeps an ordinary slow
+  # rollout from paging.
+  wait: true
   timeout: 3m
-  patches:
-    # THE ONE OBJECT FLUX MUST NOT TOUCH. Without this it would write the manifest's
-    # `image: ...:latest` over the SHA CI pinned, every interval, forever.
-    - patch: |
-        apiVersion: apps/v1
-        kind: Deployment
-        metadata:
-          name: not-used
-          annotations:
-            kustomize.toolkit.fluxcd.io/reconcile: disabled
-      target:
-        kind: Deployment
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -206,23 +191,16 @@ spec:
     kind: GitRepository
     name: movies
   path: ./infra/kubernetes/web/overlays/de
-  # PRUNE OFF for the app tiers. Everything here predates Flux and is co-owned with CI; a prune
-  # sweep on a path whose Deployment is deliberately unmanaged is a sharp edge for no gain.
+  # PRUNE STAYS OFF. Flux owns the Deployment now, but these paths predate it, and a prune sweep
+  # deleting something nobody remembered was here is a sharp edge with no matching gain.
   prune: false
-  wait: false
+  # WAIT IS ON, AND IT IS WHAT MAKES A BAD DEPLOY VISIBLE. With it, a rollout that never becomes
+  # healthy leaves this Kustomization Ready=False, which flux.rules turns into an alert. Without
+  # it Flux reports success the moment it has applied the object, so a crash-looping image would
+  # be indistinguishable from a good one. The alert's `for: 30m` is what keeps an ordinary slow
+  # rollout from paging.
+  wait: true
   timeout: 3m
-  patches:
-    # THE ONE OBJECT FLUX MUST NOT TOUCH. Without this it would write the manifest's
-    # `image: ...:latest` over the SHA CI pinned, every interval, forever.
-    - patch: |
-        apiVersion: apps/v1
-        kind: Deployment
-        metadata:
-          name: not-used
-          annotations:
-            kustomize.toolkit.fluxcd.io/reconcile: disabled
-      target:
-        kind: Deployment
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -235,23 +213,16 @@ spec:
     kind: GitRepository
     name: movies
   path: ./infra/kubernetes/web/overlays/uk
-  # PRUNE OFF for the app tiers. Everything here predates Flux and is co-owned with CI; a prune
-  # sweep on a path whose Deployment is deliberately unmanaged is a sharp edge for no gain.
+  # PRUNE STAYS OFF. Flux owns the Deployment now, but these paths predate it, and a prune sweep
+  # deleting something nobody remembered was here is a sharp edge with no matching gain.
   prune: false
-  wait: false
+  # WAIT IS ON, AND IT IS WHAT MAKES A BAD DEPLOY VISIBLE. With it, a rollout that never becomes
+  # healthy leaves this Kustomization Ready=False, which flux.rules turns into an alert. Without
+  # it Flux reports success the moment it has applied the object, so a crash-looping image would
+  # be indistinguishable from a good one. The alert's `for: 30m` is what keeps an ordinary slow
+  # rollout from paging.
+  wait: true
   timeout: 3m
-  patches:
-    # THE ONE OBJECT FLUX MUST NOT TOUCH. Without this it would write the manifest's
-    # `image: ...:latest` over the SHA CI pinned, every interval, forever.
-    - patch: |
-        apiVersion: apps/v1
-        kind: Deployment
-        metadata:
-          name: not-used
-          annotations:
-            kustomize.toolkit.fluxcd.io/reconcile: disabled
-      target:
-        kind: Deployment
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -264,23 +235,16 @@ spec:
     kind: GitRepository
     name: movies
   path: ./infra/kubernetes/web/overlays/us
-  # PRUNE OFF for the app tiers. Everything here predates Flux and is co-owned with CI; a prune
-  # sweep on a path whose Deployment is deliberately unmanaged is a sharp edge for no gain.
+  # PRUNE STAYS OFF. Flux owns the Deployment now, but these paths predate it, and a prune sweep
+  # deleting something nobody remembered was here is a sharp edge with no matching gain.
   prune: false
-  wait: false
+  # WAIT IS ON, AND IT IS WHAT MAKES A BAD DEPLOY VISIBLE. With it, a rollout that never becomes
+  # healthy leaves this Kustomization Ready=False, which flux.rules turns into an alert. Without
+  # it Flux reports success the moment it has applied the object, so a crash-looping image would
+  # be indistinguishable from a good one. The alert's `for: 30m` is what keeps an ordinary slow
+  # rollout from paging.
+  wait: true
   timeout: 3m
-  patches:
-    # THE ONE OBJECT FLUX MUST NOT TOUCH. Without this it would write the manifest's
-    # `image: ...:latest` over the SHA CI pinned, every interval, forever.
-    - patch: |
-        apiVersion: apps/v1
-        kind: Deployment
-        metadata:
-          name: not-used
-          annotations:
-            kustomize.toolkit.fluxcd.io/reconcile: disabled
-      target:
-        kind: Deployment
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -293,23 +257,16 @@ spec:
     kind: GitRepository
     name: movies
   path: ./infra/kubernetes/web/overlays/es
-  # PRUNE OFF for the app tiers. Everything here predates Flux and is co-owned with CI; a prune
-  # sweep on a path whose Deployment is deliberately unmanaged is a sharp edge for no gain.
+  # PRUNE STAYS OFF. Flux owns the Deployment now, but these paths predate it, and a prune sweep
+  # deleting something nobody remembered was here is a sharp edge with no matching gain.
   prune: false
-  wait: false
+  # WAIT IS ON, AND IT IS WHAT MAKES A BAD DEPLOY VISIBLE. With it, a rollout that never becomes
+  # healthy leaves this Kustomization Ready=False, which flux.rules turns into an alert. Without
+  # it Flux reports success the moment it has applied the object, so a crash-looping image would
+  # be indistinguishable from a good one. The alert's `for: 30m` is what keeps an ordinary slow
+  # rollout from paging.
+  wait: true
   timeout: 3m
-  patches:
-    # THE ONE OBJECT FLUX MUST NOT TOUCH. Without this it would write the manifest's
-    # `image: ...:latest` over the SHA CI pinned, every interval, forever.
-    - patch: |
-        apiVersion: apps/v1
-        kind: Deployment
-        metadata:
-          name: not-used
-          annotations:
-            kustomize.toolkit.fluxcd.io/reconcile: disabled
-      target:
-        kind: Deployment
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -322,23 +279,16 @@ spec:
     kind: GitRepository
     name: movies
   path: ./infra/kubernetes/worker/overlays/pl
-  # PRUNE OFF for the app tiers. Everything here predates Flux and is co-owned with CI; a prune
-  # sweep on a path whose Deployment is deliberately unmanaged is a sharp edge for no gain.
+  # PRUNE STAYS OFF. Flux owns the Deployment now, but these paths predate it, and a prune sweep
+  # deleting something nobody remembered was here is a sharp edge with no matching gain.
   prune: false
-  wait: false
+  # WAIT IS ON, AND IT IS WHAT MAKES A BAD DEPLOY VISIBLE. With it, a rollout that never becomes
+  # healthy leaves this Kustomization Ready=False, which flux.rules turns into an alert. Without
+  # it Flux reports success the moment it has applied the object, so a crash-looping image would
+  # be indistinguishable from a good one. The alert's `for: 30m` is what keeps an ordinary slow
+  # rollout from paging.
+  wait: true
   timeout: 3m
-  patches:
-    # THE ONE OBJECT FLUX MUST NOT TOUCH. Without this it would write the manifest's
-    # `image: ...:latest` over the SHA CI pinned, every interval, forever.
-    - patch: |
-        apiVersion: apps/v1
-        kind: Deployment
-        metadata:
-          name: not-used
-          annotations:
-            kustomize.toolkit.fluxcd.io/reconcile: disabled
-      target:
-        kind: Deployment
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -351,23 +301,16 @@ spec:
     kind: GitRepository
     name: movies
   path: ./infra/kubernetes/worker/overlays/de
-  # PRUNE OFF for the app tiers. Everything here predates Flux and is co-owned with CI; a prune
-  # sweep on a path whose Deployment is deliberately unmanaged is a sharp edge for no gain.
+  # PRUNE STAYS OFF. Flux owns the Deployment now, but these paths predate it, and a prune sweep
+  # deleting something nobody remembered was here is a sharp edge with no matching gain.
   prune: false
-  wait: false
+  # WAIT IS ON, AND IT IS WHAT MAKES A BAD DEPLOY VISIBLE. With it, a rollout that never becomes
+  # healthy leaves this Kustomization Ready=False, which flux.rules turns into an alert. Without
+  # it Flux reports success the moment it has applied the object, so a crash-looping image would
+  # be indistinguishable from a good one. The alert's `for: 30m` is what keeps an ordinary slow
+  # rollout from paging.
+  wait: true
   timeout: 3m
-  patches:
-    # THE ONE OBJECT FLUX MUST NOT TOUCH. Without this it would write the manifest's
-    # `image: ...:latest` over the SHA CI pinned, every interval, forever.
-    - patch: |
-        apiVersion: apps/v1
-        kind: Deployment
-        metadata:
-          name: not-used
-          annotations:
-            kustomize.toolkit.fluxcd.io/reconcile: disabled
-      target:
-        kind: Deployment
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -380,23 +323,16 @@ spec:
     kind: GitRepository
     name: movies
   path: ./infra/kubernetes/worker/overlays/uk
-  # PRUNE OFF for the app tiers. Everything here predates Flux and is co-owned with CI; a prune
-  # sweep on a path whose Deployment is deliberately unmanaged is a sharp edge for no gain.
+  # PRUNE STAYS OFF. Flux owns the Deployment now, but these paths predate it, and a prune sweep
+  # deleting something nobody remembered was here is a sharp edge with no matching gain.
   prune: false
-  wait: false
+  # WAIT IS ON, AND IT IS WHAT MAKES A BAD DEPLOY VISIBLE. With it, a rollout that never becomes
+  # healthy leaves this Kustomization Ready=False, which flux.rules turns into an alert. Without
+  # it Flux reports success the moment it has applied the object, so a crash-looping image would
+  # be indistinguishable from a good one. The alert's `for: 30m` is what keeps an ordinary slow
+  # rollout from paging.
+  wait: true
   timeout: 3m
-  patches:
-    # THE ONE OBJECT FLUX MUST NOT TOUCH. Without this it would write the manifest's
-    # `image: ...:latest` over the SHA CI pinned, every interval, forever.
-    - patch: |
-        apiVersion: apps/v1
-        kind: Deployment
-        metadata:
-          name: not-used
-          annotations:
-            kustomize.toolkit.fluxcd.io/reconcile: disabled
-      target:
-        kind: Deployment
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -409,23 +345,16 @@ spec:
     kind: GitRepository
     name: movies
   path: ./infra/kubernetes/worker/overlays/us
-  # PRUNE OFF for the app tiers. Everything here predates Flux and is co-owned with CI; a prune
-  # sweep on a path whose Deployment is deliberately unmanaged is a sharp edge for no gain.
+  # PRUNE STAYS OFF. Flux owns the Deployment now, but these paths predate it, and a prune sweep
+  # deleting something nobody remembered was here is a sharp edge with no matching gain.
   prune: false
-  wait: false
+  # WAIT IS ON, AND IT IS WHAT MAKES A BAD DEPLOY VISIBLE. With it, a rollout that never becomes
+  # healthy leaves this Kustomization Ready=False, which flux.rules turns into an alert. Without
+  # it Flux reports success the moment it has applied the object, so a crash-looping image would
+  # be indistinguishable from a good one. The alert's `for: 30m` is what keeps an ordinary slow
+  # rollout from paging.
+  wait: true
   timeout: 3m
-  patches:
-    # THE ONE OBJECT FLUX MUST NOT TOUCH. Without this it would write the manifest's
-    # `image: ...:latest` over the SHA CI pinned, every interval, forever.
-    - patch: |
-        apiVersion: apps/v1
-        kind: Deployment
-        metadata:
-          name: not-used
-          annotations:
-            kustomize.toolkit.fluxcd.io/reconcile: disabled
-      target:
-        kind: Deployment
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -438,20 +367,13 @@ spec:
     kind: GitRepository
     name: movies
   path: ./infra/kubernetes/worker/overlays/es
-  # PRUNE OFF for the app tiers. Everything here predates Flux and is co-owned with CI; a prune
-  # sweep on a path whose Deployment is deliberately unmanaged is a sharp edge for no gain.
+  # PRUNE STAYS OFF. Flux owns the Deployment now, but these paths predate it, and a prune sweep
+  # deleting something nobody remembered was here is a sharp edge with no matching gain.
   prune: false
-  wait: false
+  # WAIT IS ON, AND IT IS WHAT MAKES A BAD DEPLOY VISIBLE. With it, a rollout that never becomes
+  # healthy leaves this Kustomization Ready=False, which flux.rules turns into an alert. Without
+  # it Flux reports success the moment it has applied the object, so a crash-looping image would
+  # be indistinguishable from a good one. The alert's `for: 30m` is what keeps an ordinary slow
+  # rollout from paging.
+  wait: true
   timeout: 3m
-  patches:
-    # THE ONE OBJECT FLUX MUST NOT TOUCH. Without this it would write the manifest's
-    # `image: ...:latest` over the SHA CI pinned, every interval, forever.
-    - patch: |
-        apiVersion: apps/v1
-        kind: Deployment
-        metadata:
-          name: not-used
-          annotations:
-            kustomize.toolkit.fluxcd.io/reconcile: disabled
-      target:
-        kind: Deployment
