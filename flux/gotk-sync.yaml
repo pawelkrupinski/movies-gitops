@@ -127,6 +127,24 @@ spec:
   wait: true
   timeout: 3m
 ---
+# Flux's own metrics Services. Separate from image-automation for the same reason that one is
+# separate from `flux/`: this is what makes the deploy path observable, and it has to be able to
+# land, be reverted, or be reasoned about without touching the thing it observes.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: flux-metrics
+  namespace: flux-system
+spec:
+  interval: 10m
+  sourceRef:
+    kind: GitRepository
+    name: movies
+  path: ./infra/kubernetes/flux-metrics
+  prune: true
+  wait: true
+  timeout: 3m
+---
 # The image-automation objects get a Kustomization of their own rather than riding along in
 # `./infra/kubernetes/flux`, because that directory also holds gotk-components.yaml -- pointing a
 # reconciler at it would make Flux manage its own controllers, which this file's header
