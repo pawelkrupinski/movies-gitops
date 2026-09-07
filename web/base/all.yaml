@@ -127,9 +127,12 @@ spec:
             cpu: '500m'
             memory: 1Gi
           limits:
-            # Memory limit EQUALS the request (Guaranteed QoS) and there is deliberately NO CPU
-            # limit -- same reasoning as the worker: CFS quota stalls a JVM mid-GC far worse than
-            # the limit saves.
+            # The limit is the OOM CEILING, at or above the request the scheduler reserves -- and
+            # this was never Guaranteed QoS whatever an earlier note here claimed. There is
+            # deliberately NO CPU limit (same reasoning as the worker: CFS quota stalls a JVM
+            # mid-GC far worse than the limit saves), and a container without one is Burstable
+            # however its memory is written, so eviction safety comes from the request sitting
+            # above the measured peak instead. `NodeMemoryBudgetSpec` holds that bound.
             memory: 1Gi
         # Boot is slow (Play start + the MovieCache rehydrate), so the slow start gets its own
         # probe rather than a lenient liveness threshold that would also excuse a wedged process.

@@ -30,7 +30,11 @@ spec:
               # `process_cpu_seconds_total` over 24h. `NodeCpuBudgetSpec` holds the sum.
               # de web peaked at 0.19 cores.
               cpu: "300m"
-              memory: 1Gi
+              # MEMORY IS MEASURED THE SAME WAY. `max_over_time(process_resident_memory_bytes[7d])`
+              # put web de at 813Mi on 2026-09-07; this sits above that peak with headroom
+              # rather than at the round web default, which reserved surge budget it never
+              # touched. The limit below is unchanged -- only the SCHEDULER's number moves.
+              memory: 960Mi
             limits:
               memory: 1Gi
 ---

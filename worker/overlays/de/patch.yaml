@@ -48,12 +48,20 @@ spec:
               # de worker peaked at 0.29 cores. 1,529 venues, but each advertises
               # few days and the 1400ms Filmstarts pace spreads them out.
               cpu: "500m"
-              memory: 1536Mi
+              # MEMORY IS MEASURED THE SAME WAY. `max_over_time(process_resident_memory_bytes[7d])`
+              # put worker de at 963Mi on 2026-09-07; this sits above that peak with headroom
+              # rather than at the round worker default, which reserved surge budget it never
+              # touched. The limit below is unchanged -- only the SCHEDULER's number moves.
+              memory: 1280Mi
             limits:
-              # Memory limit EQUALS the request (Guaranteed QoS, so the kubelet does not evict this
-              # ahead of anything else) and there is deliberately NO CPU limit: a CPU limit is CFS
-              # quota, and a JVM whose GC or JIT threads are suspended mid-slice stalls far worse
-              # than the limit saves.
+              # The limit is the OOM CEILING; the request above is what the SCHEDULER reserves.
+              # They are no longer equal, and this was never Guaranteed QoS whatever an earlier
+              # note here claimed: there is deliberately NO CPU limit -- a CPU limit is CFS quota,
+              # and a JVM whose GC or JIT threads are suspended mid-slice stalls far worse than
+              # the limit saves -- and a container without one is Burstable however its memory is
+              # written. So eviction safety comes from the REQUEST SITTING ABOVE THE MEASURED
+              # PEAK, not from the limit matching it: the kubelet ranks Burstable pods by how far
+              # past their own request they have gone. `NodeMemoryBudgetSpec` holds both bounds.
               memory: 1536Mi
 ---
 apiVersion: v1

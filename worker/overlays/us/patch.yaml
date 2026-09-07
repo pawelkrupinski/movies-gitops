@@ -79,10 +79,14 @@ spec:
               cpu: "1500m"
               memory: 2Gi
             limits:
-              # Memory limit EQUALS the request (Guaranteed QoS, so the kubelet does not evict this
-              # ahead of anything else) and there is deliberately NO CPU limit: a CPU limit is CFS
-              # quota, and a JVM whose GC or JIT threads are suspended mid-slice stalls far worse
-              # than the limit saves.
+              # The limit is the OOM CEILING; the request above is what the SCHEDULER reserves.
+              # They are no longer equal, and this was never Guaranteed QoS whatever an earlier
+              # note here claimed: there is deliberately NO CPU limit -- a CPU limit is CFS quota,
+              # and a JVM whose GC or JIT threads are suspended mid-slice stalls far worse than
+              # the limit saves -- and a container without one is Burstable however its memory is
+              # written. So eviction safety comes from the REQUEST SITTING ABOVE THE MEASURED
+              # PEAK, not from the limit matching it: the kubelet ranks Burstable pods by how far
+              # past their own request they have gone. `NodeMemoryBudgetSpec` holds both bounds.
               memory: 2Gi
 ---
 apiVersion: v1

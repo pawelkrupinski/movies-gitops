@@ -36,7 +36,11 @@ spec:
               # rather than trimmed to match -- the heap sizing in the base is the one proven not
               # to OOM, and rediscovering that limit on a live site is not worth the 256Mi.
               cpu: "400m"
-              memory: 1Gi
+              # MEMORY IS MEASURED THE SAME WAY. `max_over_time(process_resident_memory_bytes[7d])`
+              # put web uk at 816Mi on 2026-09-07; this sits above that peak with headroom
+              # rather than at the round web default, which reserved surge budget it never
+              # touched. The limit below is unchanged -- only the SCHEDULER's number moves.
+              memory: 960Mi
             limits:
               memory: 1Gi
 ---

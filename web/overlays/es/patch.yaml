@@ -34,7 +34,11 @@ spec:
               # 486 venues into one 18.9 MB page). A Spanish city is a PROVINCE, and the largest
               # (Madrid) holds 51 venues, which is UK-county sized and well inside the base heap.
               cpu: "300m"
-              memory: 1Gi
+              # MEMORY IS MEASURED THE SAME WAY. `max_over_time(process_resident_memory_bytes[7d])`
+              # put web es at 762Mi on 2026-09-07; this sits above that peak with headroom
+              # rather than at the round web default, which reserved surge budget it never
+              # touched. The limit below is unchanged -- only the SCHEDULER's number moves.
+              memory: 896Mi
             limits:
               memory: 1Gi
 ---
