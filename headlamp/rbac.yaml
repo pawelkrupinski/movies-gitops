@@ -30,8 +30,9 @@
 #
 # TO MAKE IT A MANAGEMENT UI LATER is a deliberate second decision, not a tweak: bind a second,
 # narrower Role for the verbs wanted (say `patch` on Deployments in `kinowo`) rather than widening
-# this one to `*`, and bind it to the PERSON, as this one is. The blast radius of a name in the
-# subjects list below should stay legible.
+# this one to `*`. The blast radius of the single name in the subjects list below should stay
+# legible -- and it matters more than it used to, because that name is now a SHARED identity
+# rather than a person's: see the subjects block for what changed on 2026-09-07 and why.
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -112,51 +113,44 @@ roleRef:
   kind: ClusterRole
   name: headlamp-read
 subjects:
-  # THE POD'S OWN IDENTITY IS DELIBERATELY ABSENT. It was a subject here until 2026-09-07, described
-  # as serving "the backend's cluster-independent calls"; it was removed once those calls were
-  # actually measured. Do not add it back without reading docs/headlamp-serviceaccount-subject.md
-  # in the app repo.
+  # THE POD'S OWN IDENTITY, and since 2026-09-07 the ONLY identity Headlamp presents to the API
+  # server. The backend runs with `-unsafe-use-service-account-token` (see deployment.yaml), so
+  # every panel is answered with THIS name's read rather than with the token of whoever is looking.
   #
-  # Started with `-in-cluster`, and with neither `-unsafe-use-service-account-token` nor
-  # `-enable-cluster-inventory` set, Headlamp v0.45.0 makes exactly ONE call as the ServiceAccount:
-  # `get configmaps kube-system/kubeadm-config`, to name the in-cluster context (kubeconfig.go:1170,
-  # reached from GetInClusterContext at :1233). Everything else is carried by the bearer token the
-  # browser sent -- the in-cluster context is built with an EMPTY AuthInfo (kubeconfig.go:1279), so
-  # the proxy forwards the user's token or none at all. That is why an unauthenticated request
-  # straight to the ClusterIP answers 401 instead of serving the cluster.
+  # THAT MAKES IT A SHARED ROBOT, deliberately, and it is the entire reason the ClusterRole above
+  # withholds `secrets` and every write verb. There is no per-person authorization left underneath
+  # it: everyone admitted by the Google door at the proxy sees exactly what everyone else sees, and
+  # the API server's audit log records this name, not a person's. The grant IS the bound.
   #
-  # That one call already fails here and always has: k3s writes no kubeadm-config, so it returns
-  # NotFound -- and `deriveInClusterContextName` maps ANY error, NotFound and Forbidden alike, to ""
-  # (kubeconfig.go:1209-1213), which becomes DefaultInClusterContextName, "main" (:58). "main" is
-  # the context name the UI has been using all along. Denying the call changes the error string in
-  # one startup log line and nothing else.
+  # ⚠️ THIS SUBJECT WAS REMOVED ON 2026-09-07 AND PUT BACK THE SAME DAY, in opposite directions for
+  # good reasons both times, so read before reverting either way:
   #
-  # What the removal buys, measured rather than assumed: before it, a pod running as this
-  # ServiceAccount got 200 and a full NamespaceList through Headlamp's own proxy; after it, 403. The
-  # mounted token has stopped being a cluster-wide read credential.
+  #   - Removing it was right WHILE Headlamp did its own OIDC. The backend needed no identity of
+  #     its own (one cosmetic `get configmaps kube-system/kubeadm-config`, which already failed on
+  #     k3s), and the binding was the only thing making the mounted token a cluster-wide read
+  #     credential -- measured: a pod running as this ServiceAccount pulled a full NamespaceList
+  #     through Headlamp's own proxy, and 403'd once the subject was gone.
+  #   - Putting it back is the price of unifying sign-in onto the oauth2-proxy door. With no OIDC
+  #     there is no user token to forward, so without this the UI 401s every panel.
   #
-  # This is NOT the same as unmounting the token, and that is not the tidier version of it:
-  # `rest.InClusterConfig()` needs the token to exist, so `automountServiceAccountToken: false`
-  # would stop the backend starting at all. Leave the mount alone.
+  # ⚠️ WHAT THAT COSTS, SAID PLAINLY: an unauthenticated request straight to the ClusterIP used to
+  # answer 401 and is ANSWERED now, because the backend falls back to this token when no
+  # Authorization header arrives. The Service is a ClusterIP and no NetworkPolicy fronts it, so
+  # every pod k3s schedules can read the cluster read-only without signing in to anything. The
+  # Caddy vhost's `requireGoogleLogin` guards the PUBLIC path only. Restoring per-person identity
+  # means restoring `fleet.k3sServer.oidc` first -- this binding alone cannot do it.
+  #
+  # docs/headlamp-serviceaccount-subject.md in the app repo carries the measurements behind both
+  # halves.
+  - kind: ServiceAccount
+    name: headlamp
+    namespace: monitoring
 
-  # THE PEOPLE. Once the API server trusts Google as an issuer (fleet.k3sServer.oidc on
-  # monitoring-1), a signed-in user is a Kubernetes subject in their own right and their token --
-  # not the ServiceAccount's -- carries their API calls. Authentication grants nothing on its own:
-  # without these two names an accepted login lands on a UI that 403s every panel.
+  # NO `User` SUBJECT ANY MORE. `oidc:pawel.krupinski@gmail.com` was named here until 2026-09-07 and
+  # went with the API server's OIDC trust (`fleet.k3sServer.oidc`, deleted from
+  # infra/nix/hosts/monitoring-1/default.nix). With no issuer trusted, no Google token can
+  # authenticate as a Kubernetes subject at all, so the name would match nothing and reading it
+  # here would suggest a per-person path that no longer exists.
   #
-  # `oidc:` IS PART OF THE NAME, not decoration. It is the `--oidc-username-prefix` the API server
-  # is started with, and it exists so an OIDC identity can never collide with a client-certificate
-  # CN or a ServiceAccount of the same string. Drop the prefix here and the binding matches nobody.
-  #
-  # Named individually rather than by a group claim: Google issues no group for a personal account,
-  # and a name that has to be edited to add a person is the right amount of friction for a cluster
-  # this size.
-  #
-  # ONE ACCOUNT, deliberately. `pawel@bitcashier.io` was bound here briefly and removed: it is the
-  # same person, and a second identity that can read the cluster is a second thing to remember when
-  # access is reviewed or revoked. Both halves have to go together -- this binding AND the Google
-  # project's test-user list, which is the allow-list that decides whether a token is minted at all.
-  # Removing only the binding leaves an account that can still sign in and then 403.
-  - kind: User
-    name: "oidc:pawel.krupinski@gmail.com"
-    apiGroup: rbac.authorization.k8s.io
+  # The allow-list that decides who gets in is now `fleet.googleSso.allowedEmails` on monitoring-1,
+  # one layer out at the proxy, and it admits people to the UI rather than to Kubernetes.

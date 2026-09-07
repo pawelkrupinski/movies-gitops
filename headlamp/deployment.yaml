@@ -79,28 +79,26 @@ spec:
           args:
             - "-in-cluster"
             - "-plugins-dir=/headlamp/plugins"
-          env:
-            # OIDC AGAINST GOOGLE, so the published instance authenticates people rather than
-            # asking for a service-account token. `HEADLAMP_CONFIG_*` is Headlamp's documented
-            # env form of the `-oidc-*` flags; the flags cannot read a Secret, and the secret
-            # must not be an argv string visible in `kubectl get pod -o yaml`.
+            # EVERY API CALL IS NOW THE POD'S OWN, because no per-person token is left to carry
+            # one. Headlamp's in-cluster context is otherwise built with an EMPTY AuthInfo and
+            # simply forwards whatever `Authorization` header arrived; with OIDC gone that header
+            # is never set and every panel would 401. This flag copies the mounted ServiceAccount
+            # token onto the context (kubeconfig.go:1281) and CLEARS the incoming header before
+            # proxying (headlamp.go:1978-1994).
             #
-            # ⚠️ VERIFY THE LOGIN PAGE OFFERS "Sign in", not a token box. A misspelt
-            # HEADLAMP_CONFIG_* name is ACCEPTED AND IGNORED -- the same shape that made
-            # Reloader's `RELOADER_AUTO_RELOAD_ALL` do nothing silently, which is why this
-            # comment exists rather than a trusting one.
-            - name: HEADLAMP_CONFIG_OIDC_CLIENT_ID
-              valueFrom:
-                secretKeyRef: { name: headlamp-oidc, key: client-id }
-            - name: HEADLAMP_CONFIG_OIDC_CLIENT_SECRET
-              valueFrom:
-                secretKeyRef: { name: headlamp-oidc, key: client-secret }
-            - name: HEADLAMP_CONFIG_OIDC_IDP_ISSUER_URL
-              value: "https://accounts.google.com"
-            - name: HEADLAMP_CONFIG_OIDC_SCOPES
-              value: "openid,email,profile"
-            # Must match the redirect URI registered on the Google client EXACTLY, or the
-            # consent screen refuses with redirect_uri_mismatch.
+            # ⚠️ "unsafe" IS UPSTREAM'S NAME FOR IT AND IT IS EARNED. The backend answers with its
+            # own credential rather than the caller's, so ANY caller reaching this pod gets the
+            # ServiceAccount's read -- there is no second opinion inside the cluster. The Service
+            # is a ClusterIP with no NetworkPolicy in front of it, so the ONLY gate is
+            # `requireGoogleLogin` on the Caddy vhost. An unauthenticated request straight to the
+            # ClusterIP used to answer 401; it is answered now. rbac.yaml bounds what that buys,
+            # and `secrets` stays absent from it precisely because this is a shared identity.
+            - "-unsafe-use-service-account-token"
+          env:
+            # NO OIDC HERE ANY MORE. Sign-in moved to the fleet's oauth2-proxy door
+            # (`requireGoogleLogin` on headlamp.kinowo.net), so this instance authenticates nobody
+            # itself and the API server no longer trusts Google as an issuer. The `headlamp-oidc`
+            # Secret these variables used to read is now referenced by nothing.
             - name: HEADLAMP_CONFIG_BASE_URL
               value: ""
 
