@@ -1,0 +1,63 @@
+# WHO MAY REACH HEADLAMP AT ALL, as opposed to who may sign in to it.
+#
+# ------------------------------------------------------------------------------------------------
+# THIS IS THE ONLY THING STANDING BETWEEN A POD AND THE CLUSTER VIEW
+# ------------------------------------------------------------------------------------------------
+#
+# Headlamp runs with `-unsafe-use-service-account-token` (deployment.yaml), so the backend answers
+# with its OWN ServiceAccount rather than with the caller's token. That means it does not ask who is
+# asking: anything that can open a TCP connection to this pod gets the read-only cluster view. The
+# Google door on `headlamp.kinowo.net` guards the PUBLIC path and nothing else -- the Service is a
+# ClusterIP, so before this policy existed every pod k3s schedules could step around Caddy entirely
+# and read the cluster without signing in to anything. That is not theoretical here: the scraper
+# workloads fetch hostile third-party pages for a living.
+#
+# So the network position IS the authorization for everything except the browser path. Deleting this
+# file re-opens that hole silently -- nothing fails, nothing logs, the UI keeps working.
+#
+# ⚠️ EVERY ADDRESS BELOW WAS MEASURED, NOT REASONED ABOUT, and the obvious guesses are all wrong:
+#
+#   - Caddy runs in monitoring-1's HOST network namespace and reaches the pod cross-node over
+#     flannel, so it arrives as 10.42.0.0 -- that node's flannel.1 gateway. It does NOT arrive as
+#     the node IP 10.20.0.11. A rule written against the node IP locks Caddy out and 502s the
+#     public site.
+#   - kubelet probes a pod on its OWN node over the cni0 bridge, so it arrives as 10.42.2.1, a
+#     THIRD kind of address. Headlamp has both a liveness and a readiness probe; block them and the
+#     pod fails readiness and then restart-loops.
+#
+# Measured 2026-09-07 with a hostNetwork pod on monitoring-1 and an nginx pod carrying a probe, both
+# reading the source address out of the access log. Re-measure the same way rather than assuming, if
+# the fleet's CNI or subnet allocation ever changes.
+#
+# NONE OF THESE ADMITS A POD. `.0` is a node's flannel gateway and `.1` its cni0 bridge; both are
+# reserved, and pod IPs are allocated from `.2` upwards (headlamp itself is 10.42.2.114). So this
+# names the two hosts' network namespaces and no workload.
+#
+# ⚠️ IT FAILS CLOSED, deliberately. If flannel ever hands a node a different /24, Headlamp stops
+# answering on the public name -- loud, quickly diagnosed, and monitoring rather than the web tier.
+# The alternative, a wider rule that keeps working, would fail OPEN and say nothing.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: headlamp-ingress
+  namespace: monitoring
+  labels:
+    app: headlamp
+spec:
+  podSelector:
+    matchLabels:
+      app: headlamp
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        # monitoring-1's flannel.1 gateway -- Caddy, reaching the pod on the other node.
+        - ipBlock: { cidr: "10.42.0.0/32" }
+        # monitoring-1's cni0 bridge -- Caddy and kubelet, if Headlamp is ever rescheduled here.
+        - ipBlock: { cidr: "10.42.0.1/32" }
+        # k3s-worker-1's cni0 bridge -- kubelet's liveness and readiness probes today.
+        - ipBlock: { cidr: "10.42.2.1/32" }
+      ports:
+        # The CONTAINER port, not the Service's 80. NetworkPolicy is evaluated after the Service
+        # DNAT, so naming 80 here would match nothing and deny everything.
+        - protocol: TCP
+          port: 4466
