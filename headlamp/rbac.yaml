@@ -30,7 +30,8 @@
 #
 # TO MAKE IT A MANAGEMENT UI LATER is a deliberate second decision, not a tweak: bind a second,
 # narrower Role for the verbs wanted (say `patch` on Deployments in `kinowo`) rather than widening
-# this one to `*`. The blast radius of this ServiceAccount should stay legible.
+# this one to `*`, and bind it to the PERSON, as this one is. The blast radius of a name in the
+# subjects list below should stay legible.
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -111,10 +112,32 @@ roleRef:
   kind: ClusterRole
   name: headlamp-read
 subjects:
-  # The pod's own identity, used for the backend's cluster-independent calls.
-  - kind: ServiceAccount
-    name: headlamp
-    namespace: monitoring
+  # THE POD'S OWN IDENTITY IS DELIBERATELY ABSENT. It was a subject here until 2026-09-07, described
+  # as serving "the backend's cluster-independent calls"; it was removed once those calls were
+  # actually measured. Do not add it back without reading docs/headlamp-serviceaccount-subject.md
+  # in the app repo.
+  #
+  # Started with `-in-cluster`, and with neither `-unsafe-use-service-account-token` nor
+  # `-enable-cluster-inventory` set, Headlamp v0.45.0 makes exactly ONE call as the ServiceAccount:
+  # `get configmaps kube-system/kubeadm-config`, to name the in-cluster context (kubeconfig.go:1170,
+  # reached from GetInClusterContext at :1233). Everything else is carried by the bearer token the
+  # browser sent -- the in-cluster context is built with an EMPTY AuthInfo (kubeconfig.go:1279), so
+  # the proxy forwards the user's token or none at all. That is why an unauthenticated request
+  # straight to the ClusterIP answers 401 instead of serving the cluster.
+  #
+  # That one call already fails here and always has: k3s writes no kubeadm-config, so it returns
+  # NotFound -- and `deriveInClusterContextName` maps ANY error, NotFound and Forbidden alike, to ""
+  # (kubeconfig.go:1209-1213), which becomes DefaultInClusterContextName, "main" (:58). "main" is
+  # the context name the UI has been using all along. Denying the call changes the error string in
+  # one startup log line and nothing else.
+  #
+  # What the removal buys, measured rather than assumed: before it, a pod running as this
+  # ServiceAccount got 200 and a full NamespaceList through Headlamp's own proxy; after it, 403. The
+  # mounted token has stopped being a cluster-wide read credential.
+  #
+  # This is NOT the same as unmounting the token, and that is not the tidier version of it:
+  # `rest.InClusterConfig()` needs the token to exist, so `automountServiceAccountToken: false`
+  # would stop the backend starting at all. Leave the mount alone.
 
   # THE PEOPLE. Once the API server trusts Google as an issuer (fleet.k3sServer.oidc on
   # monitoring-1), a signed-in user is a Kubernetes subject in their own right and their token --
