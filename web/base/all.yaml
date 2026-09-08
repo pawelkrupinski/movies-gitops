@@ -83,6 +83,23 @@ metadata:
     app: web
 spec:
   replicas: 1
+  # HOW LONG A NEW POD MUST STAY READY BEFORE ITS PREDECESSOR IS ALLOWED TO DIE.
+  #
+  # Without it `maxUnavailable: 0` is weaker than it looks: the old pod is retired the instant the
+  # new one passes readiness ONCE, so a JVM that answers /health and then falls over takes the
+  # country with it -- there is no replica left to serve. Thirty seconds is what the sibling
+  # bitcashier fleet uses, and it is long enough to cover the window where this app is most
+  # fragile: readiness passes when Play binds, while the MovieCache is still filling behind it.
+  #
+  # It makes deploys SLOWER, on purpose. All five countries roll in lockstep off one image line and
+  # already serialise against the node's surge budget, so this adds ~30s per country to a roll that
+  # takes ~150s. That trade is the right way round -- a slow deploy is invisible, a country that
+  # 502s is the only thing users see.
+  minReadySeconds: 30
+  # The default is already 600, but a rollout that hangs Pending on this node is a REAL failure
+  # mode (see NodeMemoryBudgetSpec), so the deadline that marks it as such is written down rather
+  # than inherited.
+  progressDeadlineSeconds: 600
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -162,6 +179,26 @@ spec:
           periodSeconds: 30
           timeoutSeconds: 10
           failureThreshold: 4
+        # THE FIX FOR THE 502s A DEPLOY USED TO EMIT. Measured 2026-09-08: a single `web-de`
+        # rollout returned three 502s over 330ms through Caddy, on a tier whose whole point is
+        # that users never see it move.
+        #
+        # Deleting a pod starts TWO things at once and orders neither. The kubelet sends SIGTERM,
+        # and -- independently -- the endpoints controller drops the pod from the Service, which
+        # only becomes real once kube-proxy has rewritten this node's iptables. Play begins
+        # unbinding on the first while the second is still in flight, so for a moment the NodePort
+        # still forwards to a socket that has stopped accepting. Caddy fronts these NodePorts with
+        # a bare `reverse_proxy` and no retry, so each of those lands on a person as a 502.
+        #
+        # `sleep` does nothing except not exit: the container keeps serving normally throughout,
+        # and SIGTERM is not sent until the hook returns. That is the entire mechanism -- it buys
+        # the endpoint removal time to propagate before shutdown starts. 15s is the sibling
+        # bitcashier fleet's value, and it fits inside the 30s grace period below with room for
+        # Play's own shutdown.
+        lifecycle:
+          preStop:
+            exec:
+              command: ["sleep", "15"]
         volumeMounts:
         - name: data
           mountPath: /data
@@ -199,3 +236,35 @@ spec:
   - name: http
     port: 9000
     targetPort: http
+---
+# WHAT A NODE DRAIN IS ALLOWED TO DO TO A COUNTRY.
+#
+# Everything above governs a ROLLOUT, which the Deployment controller drives and which
+# `maxUnavailable: 0` already makes safe. A drain is the other path to the same pod and obeys none
+# of it: `kubectl drain`, a node cordoned for a host move, or the kubelet evicting under pressure
+# all delete pods directly, and without a budget the API server has nothing to weigh them against.
+#
+# `maxUnavailable: 1` RATHER THAN `minAvailable: 1`, which is the choice that matters here. These
+# Deployments run a single replica on purpose -- Prometheus scrapes the tier through its NodePort,
+# and a second pod would have kube-proxy alternating between two independent sets of counters, so
+# every kinowo_web_* alert would see phantom resets (see overlays/pl/patch.yaml). `minAvailable: 1`
+# against one replica means the budget can NEVER be satisfied, so a drain blocks forever and a host
+# move needs `--disable-eviction` to get past it -- trading a brief outage for a stuck one.
+#
+# So be honest about what this buys today: at one replica `maxUnavailable: 1` permits the eviction
+# it describes, and is not a guard. It is the correct expression of the intent, it makes the
+# drained-pod path explicit where nothing named it before, and it starts doing real work the moment
+# any country runs two. The thing that actually protects a drain is the preStop hook above, which
+# applies however the pod is deleted.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: web
+  namespace: kinowo
+  labels:
+    app: web
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: web
