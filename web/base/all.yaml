@@ -129,7 +129,7 @@ spec:
         #
         # NOT `latest`, ever: a pod restarting under a moving tag can come back on a
         # different build with nothing recording which. The value below is a real build.
-        image: ghcr.io/pawelkrupinski/movies-web:main-20260914180521-bf5a4cd # {"$imagepolicy": "flux-system:movies-web"}
+        image: ghcr.io/pawelkrupinski/movies-web:main-20260914183333-61a50e4 # {"$imagepolicy": "flux-system:movies-web"}
         imagePullPolicy: IfNotPresent
         envFrom:
         - configMapRef:
