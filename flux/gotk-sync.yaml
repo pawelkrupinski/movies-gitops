@@ -187,7 +187,16 @@ spec:
   # be indistinguishable from a good one. The alert's `for: 30m` is what keeps an ordinary slow
   # rollout from paging.
   wait: true
-  timeout: 3m
+  # 10m, NOT THE 3m DEFAULT EVERY OTHER KUSTOMIZATION IN THIS FILE USES. A 2026-09-21
+  # deploy audit found kustomize-controller hitting this timeout on the web tier five times
+  # in 48h (web-pl, web-us), each retried ~10 minutes later and succeeded -- so the deploy
+  # path was never actually broken, but a measured worst case of 6m17s for a web rollout to
+  # converge was already double the old timeout. Only two rollouts were measured, so this is
+  # a generous margin above a small sample, not a tuned number -- watch
+  # flux:kustomization_reconcile_duration_seconds:p95 (nix/files/monitoring/rules/flux.rules)
+  # and tighten this once more data exists. Worker gets a smaller bump below because its
+  # measured worst case (3m19s) was far closer to 3m already, not because it is known safe.
+  timeout: 10m
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -209,7 +218,16 @@ spec:
   # be indistinguishable from a good one. The alert's `for: 30m` is what keeps an ordinary slow
   # rollout from paging.
   wait: true
-  timeout: 3m
+  # 10m, NOT THE 3m DEFAULT EVERY OTHER KUSTOMIZATION IN THIS FILE USES. A 2026-09-21
+  # deploy audit found kustomize-controller hitting this timeout on the web tier five times
+  # in 48h (web-pl, web-us), each retried ~10 minutes later and succeeded -- so the deploy
+  # path was never actually broken, but a measured worst case of 6m17s for a web rollout to
+  # converge was already double the old timeout. Only two rollouts were measured, so this is
+  # a generous margin above a small sample, not a tuned number -- watch
+  # flux:kustomization_reconcile_duration_seconds:p95 (nix/files/monitoring/rules/flux.rules)
+  # and tighten this once more data exists. Worker gets a smaller bump below because its
+  # measured worst case (3m19s) was far closer to 3m already, not because it is known safe.
+  timeout: 10m
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -231,7 +249,16 @@ spec:
   # be indistinguishable from a good one. The alert's `for: 30m` is what keeps an ordinary slow
   # rollout from paging.
   wait: true
-  timeout: 3m
+  # 10m, NOT THE 3m DEFAULT EVERY OTHER KUSTOMIZATION IN THIS FILE USES. A 2026-09-21
+  # deploy audit found kustomize-controller hitting this timeout on the web tier five times
+  # in 48h (web-pl, web-us), each retried ~10 minutes later and succeeded -- so the deploy
+  # path was never actually broken, but a measured worst case of 6m17s for a web rollout to
+  # converge was already double the old timeout. Only two rollouts were measured, so this is
+  # a generous margin above a small sample, not a tuned number -- watch
+  # flux:kustomization_reconcile_duration_seconds:p95 (nix/files/monitoring/rules/flux.rules)
+  # and tighten this once more data exists. Worker gets a smaller bump below because its
+  # measured worst case (3m19s) was far closer to 3m already, not because it is known safe.
+  timeout: 10m
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -253,7 +280,16 @@ spec:
   # be indistinguishable from a good one. The alert's `for: 30m` is what keeps an ordinary slow
   # rollout from paging.
   wait: true
-  timeout: 3m
+  # 10m, NOT THE 3m DEFAULT EVERY OTHER KUSTOMIZATION IN THIS FILE USES. A 2026-09-21
+  # deploy audit found kustomize-controller hitting this timeout on the web tier five times
+  # in 48h (web-pl, web-us), each retried ~10 minutes later and succeeded -- so the deploy
+  # path was never actually broken, but a measured worst case of 6m17s for a web rollout to
+  # converge was already double the old timeout. Only two rollouts were measured, so this is
+  # a generous margin above a small sample, not a tuned number -- watch
+  # flux:kustomization_reconcile_duration_seconds:p95 (nix/files/monitoring/rules/flux.rules)
+  # and tighten this once more data exists. Worker gets a smaller bump below because its
+  # measured worst case (3m19s) was far closer to 3m already, not because it is known safe.
+  timeout: 10m
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -275,7 +311,16 @@ spec:
   # be indistinguishable from a good one. The alert's `for: 30m` is what keeps an ordinary slow
   # rollout from paging.
   wait: true
-  timeout: 3m
+  # 10m, NOT THE 3m DEFAULT EVERY OTHER KUSTOMIZATION IN THIS FILE USES. A 2026-09-21
+  # deploy audit found kustomize-controller hitting this timeout on the web tier five times
+  # in 48h (web-pl, web-us), each retried ~10 minutes later and succeeded -- so the deploy
+  # path was never actually broken, but a measured worst case of 6m17s for a web rollout to
+  # converge was already double the old timeout. Only two rollouts were measured, so this is
+  # a generous margin above a small sample, not a tuned number -- watch
+  # flux:kustomization_reconcile_duration_seconds:p95 (nix/files/monitoring/rules/flux.rules)
+  # and tighten this once more data exists. Worker gets a smaller bump below because its
+  # measured worst case (3m19s) was far closer to 3m already, not because it is known safe.
+  timeout: 10m
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -297,7 +342,11 @@ spec:
   # be indistinguishable from a good one. The alert's `for: 30m` is what keeps an ordinary slow
   # rollout from paging.
   wait: true
-  timeout: 3m
+  # 6m, UP FROM THE 3m DEFAULT. The same 2026-09-21 audit that raised the web timeout to 10m
+  # measured a worker rollout at 3m19s to converge -- already past the old 3m timeout, just
+  # not caught retrying in the 48h window checked. Two samples only; see the web Kustomizations
+  # above for the full reasoning and the metric to watch before tightening this.
+  timeout: 6m
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -319,7 +368,11 @@ spec:
   # be indistinguishable from a good one. The alert's `for: 30m` is what keeps an ordinary slow
   # rollout from paging.
   wait: true
-  timeout: 3m
+  # 6m, UP FROM THE 3m DEFAULT. The same 2026-09-21 audit that raised the web timeout to 10m
+  # measured a worker rollout at 3m19s to converge -- already past the old 3m timeout, just
+  # not caught retrying in the 48h window checked. Two samples only; see the web Kustomizations
+  # above for the full reasoning and the metric to watch before tightening this.
+  timeout: 6m
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -341,7 +394,11 @@ spec:
   # be indistinguishable from a good one. The alert's `for: 30m` is what keeps an ordinary slow
   # rollout from paging.
   wait: true
-  timeout: 3m
+  # 6m, UP FROM THE 3m DEFAULT. The same 2026-09-21 audit that raised the web timeout to 10m
+  # measured a worker rollout at 3m19s to converge -- already past the old 3m timeout, just
+  # not caught retrying in the 48h window checked. Two samples only; see the web Kustomizations
+  # above for the full reasoning and the metric to watch before tightening this.
+  timeout: 6m
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -363,7 +420,11 @@ spec:
   # be indistinguishable from a good one. The alert's `for: 30m` is what keeps an ordinary slow
   # rollout from paging.
   wait: true
-  timeout: 3m
+  # 6m, UP FROM THE 3m DEFAULT. The same 2026-09-21 audit that raised the web timeout to 10m
+  # measured a worker rollout at 3m19s to converge -- already past the old 3m timeout, just
+  # not caught retrying in the 48h window checked. Two samples only; see the web Kustomizations
+  # above for the full reasoning and the metric to watch before tightening this.
+  timeout: 6m
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -385,4 +446,8 @@ spec:
   # be indistinguishable from a good one. The alert's `for: 30m` is what keeps an ordinary slow
   # rollout from paging.
   wait: true
-  timeout: 3m
+  # 6m, UP FROM THE 3m DEFAULT. The same 2026-09-21 audit that raised the web timeout to 10m
+  # measured a worker rollout at 3m19s to converge -- already past the old 3m timeout, just
+  # not caught retrying in the 48h window checked. Two samples only; see the web Kustomizations
+  # above for the full reasoning and the metric to watch before tightening this.
+  timeout: 6m
