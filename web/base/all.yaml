@@ -62,6 +62,14 @@ data:
   # anyway, so the fold was mostly a no-op there. Moving to a database of its own
   # later is this same variable plus that grant.
   MONGODB_USERS_DB: kinowo
+  # `Secure` ON THE SESSION COOKIE (`play.http.session.secure`, default false in the app because
+  # localhost and the page-test servers are plain http). Every public name this tier answers --
+  # kinowo.net, showtimes.cc and their www. -- is HTTPS-only: Cloudflare and Caddy both 301 plain
+  # http to https, and Caddy sends HSTS. Nothing that reaches a pod over plain http carries a
+  # session: the kubelet probes hit /health and Prometheus scrapes /metrics, neither signed in.
+  # Caddy -> pod is plain http on loopback, which does not matter: Play writes the attribute
+  # regardless of the request's scheme, and it is the BROWSER that honours it.
+  KINOWO_SESSION_SECURE: "true"
   # Carried verbatim from fly.toml. G1 with a 384m heap is the known-good sizing: a pass at 192m
   # OOM-crash-looped once the MovieCache grew past a few cities, and the repeated JVM cold-starts
   # read as "high load" rather than as the OOM they were. Re-tuning it is a separate change from
