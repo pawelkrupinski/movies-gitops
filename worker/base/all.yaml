@@ -107,6 +107,26 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.labels['country']
+        # THE FACEBOOK APP CREDENTIALS, for the worker's re-scrape of a film page after its share
+        # card changes (so a link pasted into Facebook/WhatsApp picks up the new og:image). Two
+        # keys picked out of `web-secrets` -- the web pods' Secret, managed outside this repo --
+        # rather than the whole Secret mounted, so the worker gains these two values and nothing
+        # else of the web's. Unsuffixed on purpose: it is not a resource here, so kustomize's
+        # nameSuffix leaves the reference alone and every country reads the one Secret.
+        # `optional: true` so a missing Secret or key only disables the re-scrape; it never keeps
+        # the worker from starting.
+        - name: FACEBOOK_APP_ID
+          valueFrom:
+            secretKeyRef:
+              name: web-secrets
+              key: FACEBOOK_APP_ID
+              optional: true
+        - name: FACEBOOK_APP_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: web-secrets
+              key: FACEBOOK_APP_SECRET
+              optional: true
         envFrom:
         - configMapRef:
             name: worker-env
