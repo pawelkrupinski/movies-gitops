@@ -92,6 +92,18 @@ spec:
         # different build with nothing recording which. The value below is a real build.
         image: ghcr.io/pawelkrupinski/movies-worker:main-20260924062855-147a213 # {"$imagepolicy": "flux-system:movies-worker"}
         imagePullPolicy: IfNotPresent
+        # WHICH DIRECTORY OF THE NODE'S HEAP-DUMP HOSTPATH THIS POD WRITES TO -- see the `heapdumps`
+        # volume below. Read off the pod's own labels (the overlay adds `country`), so the base
+        # names no country and every overlay gets its own directory without a patch.
+        env:
+        - name: POD_APP_LABEL
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['app']
+        - name: POD_COUNTRY_LABEL
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['country']
         envFrom:
         - configMapRef:
             name: worker-env
@@ -122,10 +134,28 @@ spec:
         volumeMounts:
         - name: data
           mountPath: /data
+        - name: heapdumps
+          mountPath: /data/heapdumps
+          subPathExpr: $(POD_APP_LABEL)-$(POD_COUNTRY_LABEL)
       volumes:
       - name: data
         persistentVolumeClaim:
           claimName: worker-data
+      # HEAP DUMPS OUTLIVE THE POD: a hostPath on k3s-worker-1, the node every kinowo pod is pinned
+      # to, one directory per app-country (/var/lib/kinowo/heapdumps/web-pl/, .../worker-us/, via
+      # subPathExpr above). web-pl heap-OOMed on 2026-09-23 with its dump on an emptyDir, and the
+      # dump went with the pod. A hostPath rather than a PVC per app-country: one place to fetch
+      # from, and one directory tree the node-side budget can see whole.
+      #
+      # BOUNDED TWICE, oldest deleted first, never a dump still being written: the image prunes
+      # its own directory before each JVM start, and the node's `kinowo-heap-dumps` timer holds
+      # 3 dumps / 4 GiB per app-country and 16 GiB in total every 15 minutes. Both run the one
+      # script, infra/nix/files/heap-dumps.sh in the app repo; its runbook is docs/heap-dumps.md.
+      # The path must match `fleet.heapDumps.root` in infra/nix/modules/fleet/heap-dumps.nix.
+      - name: heapdumps
+        hostPath:
+          path: /var/lib/kinowo/heapdumps
+          type: DirectoryOrCreate
 ---
 apiVersion: v1
 kind: Service

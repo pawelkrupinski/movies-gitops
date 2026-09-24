@@ -6,8 +6,9 @@
 #   KINOWO_COUNTRY    SINGULAR, not KINOWO_COUNTRIES. The two tiers name their country through
 #                     different variables (see Country.soleFromEnv) and getting this wrong hands
 #                     the process the Poland default -- an English site serving Polish cinemas.
-#   no PVC            web is stateless. The worker's /data holds heap dumps, logs and an AppCDS
-#                     archive; web keeps nothing across a restart.
+#   no PVC            web is stateless. The worker's /data PVC holds logs and an AppCDS archive;
+#                     web keeps only its crash logs, on an emptyDir. Heap dumps are the one thing
+#                     both tiers keep past the pod, on the node's hostPath (see `heapdumps` below).
 #   RollingUpdate     the worker is `Recreate` because two of them would double-write one corpus.
 #                     Web is read-only, so replicas are safe -- and this tier is the only thing
 #                     users see, so a deploy must never take it fully down. maxUnavailable: 0
@@ -147,6 +148,18 @@ spec:
         # different build with nothing recording which. The value below is a real build.
         image: ghcr.io/pawelkrupinski/movies-web:main-20260924062919-147a213 # {"$imagepolicy": "flux-system:movies-web"}
         imagePullPolicy: IfNotPresent
+        # WHICH DIRECTORY OF THE NODE'S HEAP-DUMP HOSTPATH THIS POD WRITES TO -- see the `heapdumps`
+        # volume below. Read off the pod's own labels (the overlay adds `country`), so the base
+        # names no country and every overlay gets its own directory without a patch.
+        env:
+        - name: POD_APP_LABEL
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['app']
+        - name: POD_COUNTRY_LABEL
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['country']
         envFrom:
         - configMapRef:
             name: web-env
@@ -218,24 +231,37 @@ spec:
         volumeMounts:
         - name: data
           mountPath: /data
-      # SCRATCH, not durable — deliberately an emptyDir and not the workers' PVC.
-      # An OOM here restarts the CONTAINER, not the pod, and an emptyDir outlives
-      # a container restart, so the dump written on the way down is still there to
-      # read afterwards. It is lost when the pod is replaced, which is the right
-      # trade for forensics nobody wants to pay a per-pod volume for: web-us OOMed
-      # on 2026-09-03 and left NOTHING behind, because the web tier had no dump
-      # flags and nowhere to put a dump if it had.
-      #
-      # Bounded on both sides: the image keeps exactly one dump and only while it fits in
-      # half the volume, and `sizeLimit` caps the volume itself.
+        - name: heapdumps
+          mountPath: /data/heapdumps
+          subPathExpr: $(POD_APP_LABEL)-$(POD_COUNTRY_LABEL)
+      # SCRATCH, not durable -- deliberately an emptyDir and not the workers' PVC. It holds the
+      # JVM's crash logs (-XX:ErrorFile) and its redirected stderr, both capped on boot by the
+      # image, and an emptyDir outlives a container restart, which is all they need. The heap
+      # dumps it used to hold now go to the hostPath below instead, because they must outlive
+      # the POD: this emptyDir lost web-pl's 2026-09-23 dump when its pod was replaced.
       volumes:
       - name: data
         emptyDir:
-          # A CEILING, NOT A RESERVATION — nothing is consumed until an OOM writes a dump.
-          # Sized against the 384m heaps this base serves (a dump is roughly the live set, so
-          # ~150MiB), with room for the one being written beside the one being kept. web-us
-          # runs a 1024m heap and raises this in its own overlay.
+          # A CEILING, NOT A RESERVATION -- nothing is consumed until something is written.
+          # STILL SIZED FOR A DUMP although none land here any more: NodeMemoryBudgetSpec in the
+          # app repo pins "2 x -Xmx fits" and reads this repo's main, so shrinking it (and web-us's
+          # 2Gi) has to land together with retiring that check, after this change is live.
           sizeLimit: 1Gi
+      # HEAP DUMPS OUTLIVE THE POD: a hostPath on k3s-worker-1, the node every kinowo pod is pinned
+      # to, one directory per app-country (/var/lib/kinowo/heapdumps/web-pl/, .../worker-us/, via
+      # subPathExpr above). web-pl heap-OOMed on 2026-09-23 with its dump on an emptyDir, and the
+      # dump went with the pod. A hostPath rather than a PVC per app-country: one place to fetch
+      # from, and one directory tree the node-side budget can see whole.
+      #
+      # BOUNDED TWICE, oldest deleted first, never a dump still being written: the image prunes
+      # its own directory before each JVM start, and the node's `kinowo-heap-dumps` timer holds
+      # 3 dumps / 4 GiB per app-country and 16 GiB in total every 15 minutes. Both run the one
+      # script, infra/nix/files/heap-dumps.sh in the app repo; its runbook is docs/heap-dumps.md.
+      # The path must match `fleet.heapDumps.root` in infra/nix/modules/fleet/heap-dumps.nix.
+      - name: heapdumps
+        hostPath:
+          path: /var/lib/kinowo/heapdumps
+          type: DirectoryOrCreate
 ---
 apiVersion: v1
 kind: Service
