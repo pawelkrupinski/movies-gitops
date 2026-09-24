@@ -70,6 +70,14 @@ data:
   # Caddy -> pod is plain http on loopback, which does not matter: Play writes the attribute
   # regardless of the request's scheme, and it is the BROWSER that honours it.
   KINOWO_SESSION_SECURE: "true"
+  # GLIBC ARENAS, the same two values the workers run with. A share card decodes its poster in
+  # native code (libjpeg): a progressive JPEG holds a coefficient buffer the size of the whole image
+  # in malloc'd memory, outside every JVM cap. glibc gives each thread its own arena and keeps what
+  # it freed, so on 2026-09-21 web-pl's RSS reached ~0.9 of its 1Gi limit with 445 MB in no JVM
+  # pool, and the container was OOM-killed seven times. Measured in a 1 GiB container: twelve
+  # concurrent decodes left RSS at 812 MB by default and 450 MB with these two set.
+  MALLOC_ARENA_MAX: "2"
+  MALLOC_TRIM_THRESHOLD_: "131072"
   # Carried verbatim from fly.toml. G1 with a 384m heap is the known-good sizing: a pass at 192m
   # OOM-crash-looped once the MovieCache grew past a few cities, and the repeated JVM cold-starts
   # read as "high load" rather than as the OOM they were. Re-tuning it is a separate change from
