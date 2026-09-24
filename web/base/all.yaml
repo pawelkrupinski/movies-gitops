@@ -242,11 +242,14 @@ spec:
       volumes:
       - name: data
         emptyDir:
-          # A CEILING, NOT A RESERVATION -- nothing is consumed until something is written.
-          # STILL SIZED FOR A DUMP although none land here any more: NodeMemoryBudgetSpec in the
-          # app repo pins "2 x -Xmx fits" and reads this repo's main, so shrinking it (and web-us's
-          # 2Gi) has to land together with retiring that check, after this change is live.
-          sizeLimit: 1Gi
+          # A CEILING, NOT A RESERVATION -- nothing is consumed until something is written, and
+          # over it the kubelet EVICTS the pod. Sized to what lands here now: the stderr log
+          # (trimmed past 16MiB on boot) and the newest hs_err files, ~96MiB at worst; measured
+          # 2026-09-24, /data/logs held 8KiB on every web pod. It was 1Gi (2Gi on web-us) while it
+          # had to hold two heap dumps. Disk-backed on purpose -- no `medium: Memory`, whose tmpfs
+          # would be charged to the pod's memory limit. NodeMemoryBudgetSpec in the app repo pins
+          # both the medium and this size.
+          sizeLimit: 256Mi
       # HEAP DUMPS OUTLIVE THE POD: a hostPath on k3s-worker-1, the node every kinowo pod is pinned
       # to, one directory per app-country (/var/lib/kinowo/heapdumps/web-pl/, .../worker-us/, via
       # subPathExpr above). web-pl heap-OOMed on 2026-09-23 with its dump on an emptyDir, and the
