@@ -117,6 +117,9 @@ spec:
             # grant and the collection are one decision written twice, on purpose, in two files that
             # sit beside each other.
             - --resources=nodes,pods,deployments,replicasets,daemonsets,statefulsets,namespaces,jobs,cronjobs,persistentvolumeclaims
+            # FLUX'S OWN OBJECTS, as `gotk_resource_info` -- see flux-crs-config.yaml for the labels
+            # and why. Its API groups are granted in rbac.yaml beside the built-in kinds above.
+            - --custom-resource-state-config-file=/etc/ksm/flux.yaml
           ports:
             - name: http-metrics
               containerPort: 8080
@@ -143,6 +146,10 @@ spec:
               # because it was hit once. NOTE the loop it closes: this limit is one of the things
               # that can produce the OOMKilled event `K3sContainerOOMKilled` alerts on.
               memory: 192Mi
+          volumeMounts:
+            - name: flux-crs-config
+              mountPath: /etc/ksm
+              readOnly: true
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -166,6 +173,10 @@ spec:
               port: telemetry
             initialDelaySeconds: 5
             timeoutSeconds: 5
+      volumes:
+        - name: flux-crs-config
+          configMap:
+            name: kube-state-metrics-flux
 ---
 apiVersion: v1
 kind: Service

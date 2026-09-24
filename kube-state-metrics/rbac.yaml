@@ -97,6 +97,26 @@ rules:
       - cronjobs
     verbs: ["list", "watch"]
 
+  # FLUX'S OBJECTS, for the custom-resource-state config in flux-crs-config.yaml. Read-only status,
+  # nothing secret: these are the same objects `flux get all -A` prints. Each group here must match
+  # a `groupVersionKind` there, and the reverse -- a kind in the config without its grant here is a
+  # reflector failing on permissions with every other metric looking fine.
+  - apiGroups: ["kustomize.toolkit.fluxcd.io"]
+    resources: ["kustomizations"]
+    verbs: ["list", "watch"]
+  - apiGroups: ["source.toolkit.fluxcd.io"]
+    resources: ["gitrepositories"]
+    verbs: ["list", "watch"]
+  - apiGroups: ["image.toolkit.fluxcd.io"]
+    resources: ["imagerepositories", "imagepolicies", "imageupdateautomations"]
+    verbs: ["list", "watch"]
+
+  # The custom-resource-state machinery discovers each configured kind through its CRD before it
+  # starts a reflector, so it needs to read CRDs -- definitions only, which name no instance.
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["list", "watch"]
+
   # DELIBERATELY ABSENT, so their absence does not read as an oversight: `secrets`, `configmaps`,
   # `services`, `endpoints`, `ingresses`, `networkpolicies`, `resourcequotas`, `storageclasses`,
   # `volumeattachments`, `certificatesigningrequests`, `mutatingwebhookconfigurations`. Upstream's

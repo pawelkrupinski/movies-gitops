@@ -1,0 +1,82 @@
+# kube-state-metrics' custom-resource-state config for Flux's own objects: one `gotk_<kind>_info`
+# series family per kind, which the movies repository's flux.rules (`flux-objects` group) unions
+# into `flux:resource_info` and alerts on.
+#
+# WHY THIS EXISTS: the Flux controllers stopped publishing `gotk_reconcile_condition` and
+# `gotk_suspend_status`, so nothing on this fleet could see an object that reconciles on time and
+# FAILS every time, or one somebody suspended and never resumed. This config makes kube-state-metrics
+# read the answer straight off each object -- `status.conditions[type=Ready].status` and
+# `spec.suspend` -- which is the shape Flux's own monitoring example recommends. It says what
+# `flux get all -A` says.
+#
+# ONE METRIC NAME PER KIND, NOT ONE SHARED NAME, and that is not style. Given the same name for
+# several kinds, kube-state-metrics serves the series of only one of them for that name -- all five
+# as `gotk_resource_info` published 19 of the cluster's 22 objects, no ImageRepository and no
+# ImageUpdateAutomation, with nothing in its log (v2.14 through v2.17, measured 2026-09-24 against
+# this cluster). Distinct names publish all 22. A kind added here must also join the name list in
+# flux.rules' `flux:resource_info` recording rule, or it is published and never watched.
+#
+# THE LABELS ARE A CONTRACT WITH flux.rules. `FluxObjectNotReady` selects `ready="False"` and
+# `FluxObjectSuspended` selects `suspended="true"`, both grouped by `customresource_kind` (added by
+# kube-state-metrics itself), `namespace` and `name`. Rename a label here and the rule goes silent
+# with no error; `FluxObjectStateAbsent` only catches every series vanishing.
+#
+# ONLY THE KINDS THIS CLUSTER HAS. Every resource listed is a reflector, and a kind whose CRD is not
+# installed is a reflector erroring in a log nobody reads. `kubectl get crd | grep fluxcd` before
+# adding one; all five serve v1 as of 2026-09-24. A CRD dropping `v1` in a future Flux upgrade makes
+# its series disappear -- which is what `FluxObjectStateAbsent`'s description tells the reader to
+# check.
+#
+# EVERY ENTRY GRANTS NOTHING ON ITS OWN: the ClusterRole in rbac.yaml must list/watch the same API
+# groups, the same way `--resources` and the built-in grants are paired there.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kube-state-metrics-flux
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: kube-state-metrics
+data:
+  flux.yaml: |
+    kind: CustomResourceStateMetrics
+    spec:
+      resources:
+        - groupVersionKind: {group: kustomize.toolkit.fluxcd.io, version: v1, kind: Kustomization}
+          metricNamePrefix: gotk
+          labelsFromPath: &labels
+            name: [metadata, name]
+            namespace: [metadata, namespace]
+            ready: [status, conditions, "[type=Ready]", status]
+            suspended: [spec, suspend]
+          metrics:
+            - name: kustomization_info
+              help: "A Flux Kustomization's current state: its Ready condition and spec.suspend."
+              each: {type: Info, info: {labelsFromPath: {name: [metadata, name]}}}
+        - groupVersionKind: {group: source.toolkit.fluxcd.io, version: v1, kind: GitRepository}
+          metricNamePrefix: gotk
+          labelsFromPath: *labels
+          metrics:
+            - name: gitrepository_info
+              help: "A Flux GitRepository's current state: its Ready condition and spec.suspend."
+              each: {type: Info, info: {labelsFromPath: {name: [metadata, name]}}}
+        - groupVersionKind: {group: image.toolkit.fluxcd.io, version: v1, kind: ImageRepository}
+          metricNamePrefix: gotk
+          labelsFromPath: *labels
+          metrics:
+            - name: imagerepository_info
+              help: "A Flux ImageRepository's current state: its Ready condition and spec.suspend."
+              each: {type: Info, info: {labelsFromPath: {name: [metadata, name]}}}
+        - groupVersionKind: {group: image.toolkit.fluxcd.io, version: v1, kind: ImagePolicy}
+          metricNamePrefix: gotk
+          labelsFromPath: *labels
+          metrics:
+            - name: imagepolicy_info
+              help: "A Flux ImagePolicy's current state: its Ready condition and spec.suspend."
+              each: {type: Info, info: {labelsFromPath: {name: [metadata, name]}}}
+        - groupVersionKind: {group: image.toolkit.fluxcd.io, version: v1, kind: ImageUpdateAutomation}
+          metricNamePrefix: gotk
+          labelsFromPath: *labels
+          metrics:
+            - name: imageupdateautomation_info
+              help: "A Flux ImageUpdateAutomation's current state: its Ready condition and spec.suspend."
+              each: {type: Info, info: {labelsFromPath: {name: [metadata, name]}}}
