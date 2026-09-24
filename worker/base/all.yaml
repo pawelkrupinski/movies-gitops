@@ -37,6 +37,9 @@ data:
   MALLOC_ARENA_MAX: '2'
   MALLOC_TRIM_THRESHOLD_: '131072'
   KINOWO_LOG_DIR: /data/logs
+  # The per-country disk budget for the share cards under /share-cards (see the volume below);
+  # the worker prunes non-current cards oldest-first to stay under it.
+  KINOWO_SHARE_CARD_BUDGET_MB: '1024'
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -137,6 +140,21 @@ spec:
         - name: heapdumps
           mountPath: /data/heapdumps
           subPathExpr: $(POD_APP_LABEL)-$(POD_COUNTRY_LABEL)
+        # THE SHARE CARDS, written here and served by Caddy on the node straight off the host
+        # directory (/share-cards/<cc>/<file> on every public vhost; see public-proxy.nix in the
+        # app repo). The VOLUME is deliberately NOT in this base: its hostPath names the country,
+        # so each overlay declares its own, and an overlay that forgets fails the apply (a mount
+        # with no volume) rather than silently writing into another country's directory.
+        #
+        # SHARED BY EVERY REPLICA OF A COUNTRY, deliberately: cards are content-addressed and
+        # written tmp-then-rename, so two workers rendering the same card write the same bytes and
+        # the rename is atomic. That holds because they are all on ONE node (the nodeSelector
+        # above). A second node would get its own empty hostPath that its Caddy never sees -- a
+        # multi-node worker needs shared storage (RWX) here instead, and Caddy moved with it.
+        # Every replica runs as root (the image sets no USER), which is the owner of the
+        # directory, so any replica may write; see hosts/k3s-worker-1 in the app repo.
+        - name: share-cards
+          mountPath: /share-cards
       volumes:
       - name: data
         persistentVolumeClaim:
