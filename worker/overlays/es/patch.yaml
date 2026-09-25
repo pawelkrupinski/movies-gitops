@@ -54,16 +54,6 @@ metadata:
 spec:
   template:
     spec:
-      # THIS COUNTRY'S SHARE-CARD DIRECTORY on k3s-worker-1, mounted at /share-cards by the base.
-      # hostPath because Caddy on the node serves these files directly -- the app repo's
-      # hosts/k3s-worker-1 owns the /var/lib/kinowo/share-cards parent, and the `<cc>` segment
-      # here is the one in the public URL (/share-cards/es/<file>), so it must match
-      # KINOWO_COUNTRIES above. DirectoryOrCreate makes it on first mount.
-      volumes:
-        - name: share-cards
-          hostPath:
-            path: /var/lib/kinowo/share-cards/es
-            type: DirectoryOrCreate
       containers:
         - name: worker
           resources:

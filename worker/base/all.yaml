@@ -169,9 +169,9 @@ spec:
           subPathExpr: $(POD_APP_LABEL)-$(POD_COUNTRY_LABEL)
         # THE SHARE CARDS, written here and served by Caddy on the node straight off the host
         # directory (/share-cards/<cc>/<file> on every public vhost; see public-proxy.nix in the
-        # app repo). The VOLUME is deliberately NOT in this base: its hostPath names the country,
-        # so each overlay declares its own, and an overlay that forgets fails the apply (a mount
-        # with no volume) rather than silently writing into another country's directory.
+        # app repo). One directory per country, picked by the pod's `country` label the same way
+        # as the heap dumps above -- that label is the overlay's KINOWO_COUNTRIES value and the
+        # `<cc>` segment of the public URL, so no overlay restates the path.
         #
         # SHARED BY EVERY REPLICA OF A COUNTRY, deliberately: cards are content-addressed and
         # written tmp-then-rename, so two workers rendering the same card write the same bytes and
@@ -182,6 +182,7 @@ spec:
         # directory, so any replica may write; see hosts/k3s-worker-1 in the app repo.
         - name: share-cards
           mountPath: /share-cards
+          subPathExpr: $(POD_COUNTRY_LABEL)
       volumes:
       - name: data
         persistentVolumeClaim:
@@ -200,6 +201,12 @@ spec:
       - name: heapdumps
         hostPath:
           path: /var/lib/kinowo/heapdumps
+          type: DirectoryOrCreate
+      # The share-card parent; hosts/k3s-worker-1 in the app repo owns it, and the kubelet creates
+      # each country's directory under it on first mount (subPathExpr above).
+      - name: share-cards
+        hostPath:
+          path: /var/lib/kinowo/share-cards
           type: DirectoryOrCreate
 ---
 apiVersion: v1
