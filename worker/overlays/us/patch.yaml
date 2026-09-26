@@ -21,6 +21,12 @@ data:
   # distinct pages with no version churn, ~110 KB per film → ~250-500 MB here; 6.9 GB free.
   KINOWO_OBSERVATION_CAPTURE: "true"
 
+  # Identity migration: run the new resolver in SHADOW (observations only, no network), writing
+  # identity_shadow_decisions / identity_shadow_diff (8-day TTL). Decides nothing served. Enabled
+  # once the tick streamed the scrape archive page by page (253771b20): full US corpus adds ~200 MB
+  # live heap (was ~615 MB) → ~780 MB typical, ~1,095 MB on the 04:00 spike, of ~1,237 MB.
+  KINOWO_IDENTITY_SHADOW: "true"
+
   # Identity phase 4: compare sampled slots/screenings' listingKey with today's slot key and report
   # disagreements (gauge + capped log). Read-only; a week of full agreement gates the first dual read.
   KINOWO_LISTING_KEY_SHADOW_READ: "true"
