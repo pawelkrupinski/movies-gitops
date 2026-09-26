@@ -16,6 +16,10 @@ data:
   # corpus. MONGODB_DB is never set -- it would override that and merge every country.
   KINOWO_COUNTRIES: "us"
 
+  # Identity phase 4: compare sampled slots/screenings' listingKey with today's slot key and report
+  # disagreements (gauge + capped log). Read-only; a week of full agreement gates the first dual read.
+  KINOWO_LISTING_KEY_SHADOW_READ: "true"
+
   # THE TWO SCRAPE-RATE LEVERS, AND THEY ARE COUPLED -- retune them together, never one alone.
   # WorkerScrapeCadenceConfigSpec locks the pair and will fail if they drift apart.
   #

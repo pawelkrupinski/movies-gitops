@@ -16,6 +16,10 @@ data:
   # corpus. MONGODB_DB is never set -- it would override that and merge all three.
   KINOWO_COUNTRIES: "uk"
 
+  # Identity phase 4: compare sampled slots/screenings' listingKey with today's slot key and report
+  # disagreements (gauge + capped log). Read-only; a week of full agreement gates the first dual read.
+  KINOWO_LISTING_KEY_SHADOW_READ: "true"
+
   # The dominant write-rate lever: how stale a cinema's scrape may get before it is re-scraped.
   KINOWO_SCRAPE_TASKS_PER_VENUE: "36"
   KINOWO_SCRAPE_FRESHNESS_MINUTES: "420"

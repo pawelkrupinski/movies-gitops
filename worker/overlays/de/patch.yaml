@@ -16,6 +16,14 @@ data:
   # corpus. MONGODB_DB is never set -- it would override that and merge all three.
   KINOWO_COUNTRIES: "de"
 
+  # Identity phase 4: compare sampled slots/screenings' listingKey with today's slot key and report
+  # disagreements (gauge + capped log). Read-only; a week of full agreement gates the first dual read.
+  KINOWO_LISTING_KEY_SHADOW_READ: "true"
+
+  # Identity migration: record listings and external lookups as immutable observations (obs_*,
+  # 8-day TTL). Shadow-only, proven not to change what is served. Starts the cutover's 8 days.
+  KINOWO_OBSERVATION_CAPTURE: "true"
+
   # Hide a film's ratings when its own stored evidence does not back its TMDB match (calibrated
   # threshold from identity-weights.json; see docs/design/identity-resolver.md §13.2 in the app
   # repo). Measured before enabling: DE hides 9 of 1,544 rated films, ES 2 of 209 — mostly opera
