@@ -16,6 +16,11 @@ data:
   # MONGODB_DB is never set -- it would override that and merge every country.
   KINOWO_COUNTRIES: "es"
 
+  # Identity migration: record every scraped listing and external lookup as an immutable
+  # observation (obs_listings / obs_lookups, 8-day TTL). Shadow-only — proven not to change what is
+  # served (ObservationCaptureEndToEndSpec). Starts the 8 days of observations the cutover needs.
+  KINOWO_OBSERVATION_CAPTURE: "true"
+
   # Identity phase 4: compare each sampled slot/screening's listingKey with today's slot key and
   # report disagreements (gauge + capped log). Read-only; nothing serving reads listingKey. Spain
   # first; hold a week of full agreement before any dual read (docs/design/identity-resolver.md §16.5).
