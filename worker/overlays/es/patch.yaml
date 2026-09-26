@@ -16,6 +16,11 @@ data:
   # MONGODB_DB is never set -- it would override that and merge every country.
   KINOWO_COUNTRIES: "es"
 
+  # Identity phase 4: compare each sampled slot/screening's listingKey with today's slot key and
+  # report disagreements (gauge + capped log). Read-only; nothing serving reads listingKey. Spain
+  # first; hold a week of full agreement before any dual read (docs/design/identity-resolver.md §16.5).
+  KINOWO_LISTING_KEY_SHADOW_READ: "true"
+
   # Hide a film's ratings when its own stored evidence does not back its TMDB match (calibrated
   # threshold from identity-weights.json; see docs/design/identity-resolver.md §13.2 in the app
   # repo). Measured before enabling: DE hides 9 of 1,544 rated films, ES 2 of 209 — mostly opera
