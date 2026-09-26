@@ -16,6 +16,12 @@ data:
   # MONGODB_DB is never set -- it would override that and merge every country.
   KINOWO_COUNTRIES: "es"
 
+  # Hide a film's ratings when its own stored evidence does not back its TMDB match (calibrated
+  # threshold from identity-weights.json; see docs/design/identity-resolver.md §13.2 in the app
+  # repo). Measured before enabling: DE hides 9 of 1,544 rated films, ES 2 of 209 — mostly opera
+  # and event relays matched to an unrelated film. PL/US stay off: bare-title listings score low.
+  KINOWO_IDENTITY_RATING_GATE: "true"
+
   # THE TWO SCRAPE-RATE LEVERS, AND THEY ARE COUPLED -- retune them together, never one alone.
   # WorkerScrapeCadenceConfigSpec locks the pair and will fail if they drift apart.
   #

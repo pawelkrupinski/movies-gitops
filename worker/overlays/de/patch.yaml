@@ -16,6 +16,12 @@ data:
   # corpus. MONGODB_DB is never set -- it would override that and merge all three.
   KINOWO_COUNTRIES: "de"
 
+  # Hide a film's ratings when its own stored evidence does not back its TMDB match (calibrated
+  # threshold from identity-weights.json; see docs/design/identity-resolver.md §13.2 in the app
+  # repo). Measured before enabling: DE hides 9 of 1,544 rated films, ES 2 of 209 — mostly opera
+  # and event relays matched to an unrelated film. PL/US stay off: bare-title listings score low.
+  KINOWO_IDENTITY_RATING_GATE: "true"
+
   # The dominant write-rate lever: how stale a cinema's scrape may get before it is re-scraped.
   KINOWO_SCRAPE_TASKS_PER_VENUE: "14"
   KINOWO_SCRAPE_FRESHNESS_MINUTES: "600"
