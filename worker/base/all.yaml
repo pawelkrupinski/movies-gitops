@@ -100,7 +100,7 @@ spec:
         #
         # NOT `latest`, ever: a pod restarting under a moving tag can come back on a
         # different build with nothing recording which. The value below is a real build.
-        image: ghcr.io/pawelkrupinski/movies-worker:main-20260926115200-c05ba9b # {"$imagepolicy": "flux-system:movies-worker"}
+        image: ghcr.io/pawelkrupinski/movies-worker:main-20260926122544-d2c6a84 # {"$imagepolicy": "flux-system:movies-worker"}
         imagePullPolicy: IfNotPresent
         # WHICH DIRECTORY OF THE NODE'S HEAP-DUMP HOSTPATH THIS POD WRITES TO -- see the `heapdumps`
         # volume below. Read off the pod's own labels (the overlay adds `country`), so the base
