@@ -16,6 +16,11 @@ data:
   # corpus. MONGODB_DB is never set -- it would override that and merge all three.
   KINOWO_COUNTRIES: "de"
 
+  # Identity migration: run the new resolver in SHADOW after each settle, from observations only
+  # (no network), writing identity_shadow_decisions / identity_shadow_diff (8-day TTL) for
+  # /admin/identity and the old-vs-new gauges. Decides nothing that is served.
+  KINOWO_IDENTITY_SHADOW: "true"
+
   # Identity phase 4: compare sampled slots/screenings' listingKey with today's slot key and report
   # disagreements (gauge + capped log). Read-only; a week of full agreement gates the first dual read.
   KINOWO_LISTING_KEY_SHADOW_READ: "true"

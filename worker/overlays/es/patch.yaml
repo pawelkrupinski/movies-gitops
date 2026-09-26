@@ -16,6 +16,11 @@ data:
   # MONGODB_DB is never set -- it would override that and merge every country.
   KINOWO_COUNTRIES: "es"
 
+  # Identity migration: run the new resolver in SHADOW after each settle, from observations only
+  # (no network), writing identity_shadow_decisions / identity_shadow_diff (8-day TTL) for
+  # /admin/identity and the old-vs-new gauges. Decides nothing that is served.
+  KINOWO_IDENTITY_SHADOW: "true"
+
   # Identity migration: record every scraped listing and external lookup as an immutable
   # observation (obs_listings / obs_lookups, 8-day TTL). Shadow-only — proven not to change what is
   # served (ObservationCaptureEndToEndSpec). Starts the 8 days of observations the cutover needs.
