@@ -16,6 +16,11 @@ data:
   # corpus. MONGODB_DB is never set -- it would override that and merge all three.
   KINOWO_COUNTRIES: "uk"
 
+  # Identity migration: run the new resolver in SHADOW (observations only, no network), writing
+  # identity_shadow_decisions / identity_shadow_diff (8-day TTL) for /admin/identity and the
+  # old-vs-new gauges. Decides nothing served. ES/DE ticks: 3-11 s, heap ~200 MB of 433-649 MB.
+  KINOWO_IDENTITY_SHADOW: "true"
+
   # Identity migration: record listings and external lookups as immutable observations (obs_*,
   # 8-day TTL). Shadow-only, proven not to change what is served. Measured on ES/DE: ~1 KB per
   # listing, ~20 KB per lookup. Starts this country's 8 days of observations for the cutover.
