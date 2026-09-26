@@ -16,10 +16,14 @@ data:
   # MONGODB_DB is never set -- it would override that and merge every country.
   KINOWO_COUNTRIES: "es"
 
-  # Identity migration: run the new resolver in SHADOW after each settle, from observations only
-  # (no network), writing identity_shadow_decisions / identity_shadow_diff (8-day TTL) for
-  # /admin/identity and the old-vs-new gauges. Decides nothing that is served.
+  # Identity migration: run the new resolver in SHADOW on its own 30-min claimed schedule, from
+  # observations only (no network), writing identity_shadow_decisions / identity_shadow_diff
+  # (8-day TTL) for /admin/identity and the old-vs-new gauges. Decides nothing that is served.
   KINOWO_IDENTITY_SHADOW: "true"
+  # After each shadow tick, ask TMDB the questions the observation store has no answer for, paced
+  # at KINOWO_IDENTITY_SHADOW_LOOKUP_RATE (default 60/min, ~2% of TMDB's limit; halves on 429/5xx).
+  # Answers go only to obs_lookups. Spain first: backlog ~11k asks (~3.5 h), then ~2.2 per new listing.
+  KINOWO_IDENTITY_SHADOW_LOOKUPS: "true"
 
   # Identity migration: record every scraped listing and external lookup as an immutable
   # observation (obs_listings / obs_lookups, 8-day TTL). Shadow-only — proven not to change what is
