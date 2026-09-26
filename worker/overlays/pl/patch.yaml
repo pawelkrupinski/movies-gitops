@@ -16,6 +16,11 @@ data:
   # corpus. MONGODB_DB is never set -- it would override that and merge all three.
   KINOWO_COUNTRIES: "pl"
 
+  # Identity migration: record listings and external lookups as immutable observations (obs_*,
+  # 8-day TTL). Shadow-only, proven not to change what is served. Measured on ES/DE: ~1 KB per
+  # listing, ~20 KB per lookup. Starts this country's 8 days of observations for the cutover.
+  KINOWO_OBSERVATION_CAPTURE: "true"
+
   # Identity phase 4: compare sampled slots/screenings' listingKey with today's slot key and report
   # disagreements (gauge + capped log). Read-only; a week of full agreement gates the first dual read.
   KINOWO_LISTING_KEY_SHADOW_READ: "true"
