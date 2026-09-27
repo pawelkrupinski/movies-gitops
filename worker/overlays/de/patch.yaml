@@ -20,6 +20,11 @@ data:
   # (no network), writing identity_shadow_decisions / identity_shadow_diff (8-day TTL) for
   # /admin/identity and the old-vs-new gauges. Decides nothing that is served.
   KINOWO_IDENTITY_SHADOW: "true"
+  # After each shadow tick, ask TMDB what the observation store cannot answer yet, paced at
+  # KINOWO_IDENTITY_SHADOW_LOOKUP_RATE (default 60/min; halves on 429/5xx); answers go only to
+  # obs_lookups. Proven in ES since 2026-09-26 (13k answers, 0 throttled, heap fine) — without it the
+  # shadow leaves most films "moved" (unanswered), so the cutover gate's ≥97% identical is unreachable.
+  KINOWO_IDENTITY_SHADOW_LOOKUPS: "true"
 
   # Identity phase 4: compare sampled slots/screenings' listingKey with today's slot key and report
   # disagreements (gauge + capped log). Read-only; a week of full agreement gates the first dual read.
