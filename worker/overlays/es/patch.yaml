@@ -24,6 +24,10 @@ data:
   # at KINOWO_IDENTITY_SHADOW_LOOKUP_RATE (default 60/min, ~2% of TMDB's limit; halves on 429/5xx).
   # Answers go only to obs_lookups. Spain first: backlog ~11k asks (~3.5 h), then ~2.2 per new listing.
   KINOWO_IDENTITY_SHADOW_LOOKUPS: "true"
+  # 300/min: 5 req/s per worker, 25 across the five — half TMDB's ~50 req/s. At the 60/min default
+  # the fill trailed by ~9 h on 2026-09-28 (UK 34k, PL 15k lookups unanswered), holding the shadow's
+  # identical share at 62-84%. The pipeline's lookup chain still paces every host, venue pages included.
+  KINOWO_IDENTITY_SHADOW_LOOKUP_RATE: "300"
 
   # Identity migration: record every scraped listing and external lookup as an immutable
   # observation (obs_listings / obs_lookups, 8-day TTL). Shadow-only — proven not to change what is

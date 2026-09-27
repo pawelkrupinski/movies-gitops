@@ -25,6 +25,10 @@ data:
   # obs_lookups. Proven in ES since 2026-09-26 (13k answers, 0 throttled, heap fine) — without it the
   # shadow leaves most films "moved" (unanswered), so the cutover gate's ≥97% identical is unreachable.
   KINOWO_IDENTITY_SHADOW_LOOKUPS: "true"
+  # 300/min: 5 req/s per worker, 25 across the five — half TMDB's ~50 req/s. At the 60/min default
+  # the fill trailed by ~9 h on 2026-09-28 (UK 34k, PL 15k lookups unanswered), holding the shadow's
+  # identical share at 62-84%. The pipeline's lookup chain still paces every host, venue pages included.
+  KINOWO_IDENTITY_SHADOW_LOOKUP_RATE: "300"
 
   # Identity migration: record listings and external lookups as immutable observations (obs_*,
   # 8-day TTL). Shadow-only, proven not to change what is served. Measured on ES/DE: ~1 KB per
