@@ -49,8 +49,11 @@ data:
   # Identical to the other countries except the heap. Carried from Fly verbatim: SerialGC and a
   # small pinned heap were the fix for an OOM-restart loop under G1, and re-tuning them is a
   # separate change from moving the process.
+  # 640m (DE's) since 2026-09-29: at 448m the identity model's take-up ran the heap at 419-438m
+  # and SerialGC took up to 75-87% of wall time during it (jvm_gc_collection_seconds, 19:59-20:03
+  # UTC 09-28) — every stop-the-world pause stalling the take-up's reads and resolves alike.
   JAVA_OPTS: >-
-    -Xms448m -Xmx448m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:+AutoCreateSharedArchive -XX:SharedArchiveFile=/data/app.jsa -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
+    -Xms640m -Xmx640m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:+AutoCreateSharedArchive -XX:SharedArchiveFile=/data/app.jsa -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -78,7 +81,9 @@ spec:
               # put worker uk at 781Mi on 2026-09-07; this sits above that peak with headroom
               # rather than at the round worker default, which reserved surge budget it never
               # touched. The limit below is unchanged -- only the SCHEDULER's number moves.
-              memory: 960Mi
+              # 1280Mi since 2026-09-29 (DE's shape): the heap went 448m -> 640m, and RSS had peaked
+              # at 929Mi on the 448m heap. Node requests 12.9Gi of 15.2Gi, with room for US's 2Gi surge.
+              memory: 1280Mi
             limits:
               # The limit is the OOM CEILING; the request above is what the SCHEDULER reserves.
               # They are no longer equal, and this was never Guaranteed QoS whatever an earlier
@@ -88,7 +93,7 @@ spec:
               # written. So eviction safety comes from the REQUEST SITTING ABOVE THE MEASURED
               # PEAK, not from the limit matching it: the kubelet ranks Burstable pods by how far
               # past their own request they have gone. `NodeMemoryBudgetSpec` holds both bounds.
-              memory: 1Gi
+              memory: 1536Mi
 ---
 apiVersion: v1
 kind: Service
