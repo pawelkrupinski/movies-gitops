@@ -19,10 +19,9 @@ data:
   # Identity migration: run the new resolver in SHADOW (observations only, no network), writing
   # identity_shadow_decisions / identity_shadow_diff (8-day TTL) for /admin/identity and the
   # old-vs-new gauges. Decides nothing served. ES/DE ticks: 3-11 s, heap ~200 MB of 433-649 MB.
-  # Back ON 2026-09-28 (off 10:51-17:20 UTC after three heap OOMs from the whole-corpus tick): the
-  # shadow is now the INCREMENTAL identity model — ~51 MB held on the UK recording, regions bounded
-  # to 2,000 listings (movies b9edbf0aa), against ~500 MB for one whole-corpus resolve.
-  KINOWO_IDENTITY_SHADOW: "true"
+  # OFF again 2026-09-28 17:39 UTC: the incremental model's first take-up OOMed the 448m heap — its
+  # prefetch held every question of the corpus at once. Back on once the prefetch is bounded.
+  KINOWO_IDENTITY_SHADOW: "false"
   # After each shadow tick, ask TMDB what the observation store cannot answer yet, paced at
   # KINOWO_IDENTITY_SHADOW_LOOKUP_RATE (default 60/min; halves on 429/5xx); answers go only to
   # obs_lookups. Proven in ES since 2026-09-26 (13k answers, 0 throttled, heap fine) — without it the
