@@ -19,7 +19,10 @@ data:
   # Identity migration: run the new resolver in SHADOW (observations only, no network), writing
   # identity_shadow_decisions / identity_shadow_diff (8-day TTL) for /admin/identity and the
   # old-vs-new gauges. Decides nothing served. ES/DE ticks: 3-11 s, heap ~200 MB of 433-649 MB.
-  KINOWO_IDENTITY_SHADOW: "true"
+  # OFF in UK since 2026-09-28: its whole-corpus tick (28.4k listings, 775-835 s) alone filled the
+  # 448m heap once the fill had answered most lookups — three heap OOMs that day (02:42, 07:13,
+  # 10:51 UTC). Back on when the resolver keeps its model incrementally instead of re-resolving.
+  KINOWO_IDENTITY_SHADOW: "false"
   # After each shadow tick, ask TMDB what the observation store cannot answer yet, paced at
   # KINOWO_IDENTITY_SHADOW_LOOKUP_RATE (default 60/min; halves on 429/5xx); answers go only to
   # obs_lookups. Proven in ES since 2026-09-26 (13k answers, 0 throttled, heap fine) — without it the
