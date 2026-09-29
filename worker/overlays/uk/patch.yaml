@@ -49,11 +49,12 @@ data:
   # Identical to the other countries except the heap. Carried from Fly verbatim: SerialGC and a
   # small pinned heap were the fix for an OOM-restart loop under G1, and re-tuning them is a
   # separate change from moving the process.
-  # 640m (DE's) since 2026-09-29: at 448m the identity model's take-up ran the heap at 419-438m
-  # and SerialGC took up to 75-87% of wall time during it (jvm_gc_collection_seconds, 19:59-20:03
-  # UTC 09-28) — every stop-the-world pause stalling the take-up's reads and resolves alike.
+  # 512m since 2026-09-29 16:30 UTC (448m -> 640m that morning, when the identity model's take-up
+  # ran the 448m heap at 419-438m and SerialGC took 75-87% of wall time). The day's memory work cut
+  # UK's old gen after GC 349 -> 232 MB peak THROUGH a full rebuild (15:52 UTC: resolves 44 s, full
+  # GC <=1% of wall time), so 512m's ~341 MB old gen runs at ~68% at the heaviest moment.
   JAVA_OPTS: >-
-    -Xms640m -Xmx640m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
+    -Xms512m -Xmx512m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
 ---
 apiVersion: apps/v1
 kind: Deployment
