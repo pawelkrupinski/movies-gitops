@@ -52,10 +52,8 @@ data:
   # 640m (DE's) since 2026-09-29: at 448m the identity model's take-up ran the heap at 419-438m
   # and SerialGC took up to 75-87% of wall time during it (jvm_gc_collection_seconds, 19:59-20:03
   # UTC 09-28) — every stop-the-world pause stalling the take-up's reads and resolves alike.
-  # TEMPORARY (2026-09-29): a flight recording of the boot's first minutes — the identity model's
-  # restore over the normalized TMDB store — to find where its 27 s of context goes. Remove once read.
   JAVA_OPTS: >-
-    -XX:StartFlightRecording=duration=3m,filename=/data/logs/restore-uk.jfr,settings=profile -Xms640m -Xmx640m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
+    -Xms640m -Xmx640m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
 ---
 apiVersion: apps/v1
 kind: Deployment
