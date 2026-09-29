@@ -52,12 +52,8 @@ data:
   # 640m (DE's) since 2026-09-29: at 448m the identity model's take-up ran the heap at 419-438m
   # and SerialGC took up to 75-87% of wall time during it (jvm_gc_collection_seconds, 19:59-20:03
   # UTC 09-28) — every stop-the-world pause stalling the take-up's reads and resolves alike.
-  # jdk.nio.maxCachedBufferSize=262144 as an EXPERIMENT (2026-09-29): NMT's "Other" holds 161 MB here
-  # (DE 130, PL 80), in ~75 mallocs of ~2 MB each from JIT-compiled code (NMT detail, 11:14-11:36 UTC) —
-  # the shape of NIO's per-thread temporary direct buffers, which the direct-buffer pool does not count.
-  # The cap stops NIO caching any temporary buffer over 256 KB. Watch Other in the VITALS log line.
   JAVA_OPTS: >-
-    -Xms640m -Xmx640m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.nio.maxCachedBufferSize=262144 -Djdk.http.auth.tunneling.disabledSchemes=
+    -Xms640m -Xmx640m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
 ---
 apiVersion: apps/v1
 kind: Deployment
