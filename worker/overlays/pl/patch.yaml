@@ -48,8 +48,12 @@ data:
   # Identical to the other countries except the heap. Carried from Fly verbatim: SerialGC and a
   # small pinned heap were the fix for an OOM-restart loop under G1, and re-tuning them is a
   # separate change from moving the process.
+  # MaxMetaspaceSize 192m since 2026-09-29, a STOPGAP: PL died of OutOfMemoryError: Metaspace at 21:42,
+  # 23:27, 00:52 and 03:03 UTC 09-28/29, and after the AOT class cache still loads ~8k classes per 45 min
+  # (a suspected class leak under investigation) — 122 of 128 MB peak. Metaspace grows only as used, so
+  # this is a ceiling, not RSS; it buys hours between restarts, not a fix.
   JAVA_OPTS: >-
-    -Xms448m -Xmx448m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
+    -Xms448m -Xmx448m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=192m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -87,7 +91,8 @@ spec:
               # written. So eviction safety comes from the REQUEST SITTING ABOVE THE MEASURED
               # PEAK, not from the limit matching it: the kubelet ranks Burstable pods by how far
               # past their own request they have gone. `NodeMemoryBudgetSpec` holds both bounds.
-              memory: 1Gi
+              # 1088Mi since 2026-09-29: the 192m metaspace ceiling above needs 448+192+64+96+256 = 1056Mi.
+              memory: 1088Mi
 ---
 apiVersion: v1
 kind: Service
