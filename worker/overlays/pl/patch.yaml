@@ -16,27 +16,22 @@ data:
   # corpus. MONGODB_DB is never set -- it would override that and merge all three.
   KINOWO_COUNTRIES: "pl"
 
-  # Identity migration: run the new resolver in SHADOW (observations only, no network), writing
+  # Identity migration: run the new resolver in SHADOW (from its TMDB store, no network), writing
   # identity_shadow_decisions / identity_shadow_diff (8-day TTL) for /admin/identity and the
   # old-vs-new gauges. Decides nothing served. ES/DE ticks: 3-11 s, heap ~200 MB of 433-649 MB.
   # On again 2026-09-28 ~20:10 UTC: app 5e67977ba broke PL's one 6.6k-listing family apart (largest
   # now 1,338), so a full build of the PL recording takes 23 s (was 269 s), its slowest region
   # 2.7 s (was 94 s), the model ~35 MB; 12964a7a3 lets take-up reads run in parallel.
   KINOWO_IDENTITY_SHADOW: "true"
-  # After each shadow tick, ask TMDB what the observation store cannot answer yet, paced at
+  # After each shadow tick, ask TMDB what the model's TMDB store cannot answer yet, paced at
   # KINOWO_IDENTITY_SHADOW_LOOKUP_RATE (default 60/min; halves on 429/5xx); answers go only to
-  # obs_lookups. Proven in ES since 2026-09-26 (13k answers, 0 throttled, heap fine) — without it the
+  # that store. Proven in ES since 2026-09-26 (13k answers, 0 throttled, heap fine) — without it the
   # shadow leaves most films "moved" (unanswered), so the cutover gate's ≥97% identical is unreachable.
   KINOWO_IDENTITY_SHADOW_LOOKUPS: "true"
   # 300/min: 5 req/s per worker, 25 across the five — half TMDB's ~50 req/s. At the 60/min default
   # the fill trailed by ~9 h on 2026-09-28 (UK 34k, PL 15k lookups unanswered), holding the shadow's
   # identical share at 62-84%. The pipeline's lookup chain still paces every host, venue pages included.
   KINOWO_IDENTITY_SHADOW_LOOKUP_RATE: "300"
-
-  # Identity migration: record listings and external lookups as immutable observations (obs_*,
-  # 8-day TTL). Shadow-only, proven not to change what is served. Measured on ES/DE: ~1 KB per
-  # listing, ~20 KB per lookup. Starts this country's 8 days of observations for the cutover.
-  KINOWO_OBSERVATION_CAPTURE: "true"
 
   # Identity phase 4: compare sampled slots/screenings' listingKey with today's slot key and report
   # disagreements (gauge + capped log). Read-only; a week of full agreement gates the first dual read.
