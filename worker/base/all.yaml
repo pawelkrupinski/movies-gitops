@@ -161,6 +161,19 @@ spec:
           periodSeconds: 30
           timeoutSeconds: 10
           failureThreshold: 4
+        # READY ONCE THE BOOT WORK HAS SETTLED -- the cache hydrate, the read-model projector's
+        # prepare and the identity take-up (`/ready`, WorkerMain.addReadyEndpoint), or 8 minutes after
+        # the process started, whichever is first. Nothing routes traffic to a worker; what reads this
+        # is the ROLLOUT: flux/gotk-sync.yaml rolls uk and de only once us, pl and es are ready, so at
+        # most three workers boot at once. Five at once had k3s-worker-1 at 7.9 of 8 cores
+        # (2026-09-30) and every boot several times slower. Readiness never restarts a pod; /health
+        # above stays the liveness signal and answers from the first second of a boot.
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: health
+          periodSeconds: 10
+          failureThreshold: 1
         volumeMounts:
         - name: data
           mountPath: /data
@@ -218,6 +231,11 @@ metadata:
     app: worker
 spec:
   type: NodePort
+  # A BOOTING WORKER IS STILL SCRAPED. The readiness probe above holds a pod unready for its whole
+  # boot (minutes on the US) so the rollout can stagger on it, and a Service routes only to ready
+  # pods unless told otherwise -- Prometheus scrapes through this NodePort, so without this every
+  # boot would read as `up == 0` and WorkerDown (for: 5m) would page on a healthy rollout.
+  publishNotReadyAddresses: true
   selector:
     app: worker
   ports:

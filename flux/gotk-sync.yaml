@@ -342,11 +342,11 @@ spec:
   # be indistinguishable from a good one. The alert's `for: 30m` is what keeps an ordinary slow
   # rollout from paging.
   wait: true
-  # 6m, UP FROM THE 3m DEFAULT. The same 2026-09-21 audit that raised the web timeout to 10m
-  # measured a worker rollout at 3m19s to converge -- already past the old 3m timeout, just
-  # not caught retrying in the 48h window checked. Two samples only; see the web Kustomizations
-  # above for the full reasoning and the metric to watch before tightening this.
-  timeout: 6m
+  # 12m. A worker's rollout now converges only once its pod is READY, and ready means its boot
+  # work has settled (worker/base/all.yaml's readinessProbe): ~5 min on the US, capped at 8 by the
+  # worker itself. 12 leaves the image pull and a slow boot room under that cap. (It was 6m when a
+  # rollout converged at process start: 3m19s measured by the 2026-09-21 audit.)
+  timeout: 12m
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -354,6 +354,14 @@ metadata:
   name: worker-de-config
   namespace: flux-system
 spec:
+  # ROLLED AFTER US, PL AND ES ARE READY: at most three workers boot at once. All five on one
+  # 8-core node at once saturated it (7.9 of 8 cores, 2026-09-30) and every boot ran several times
+  # slower; the readiness probe (worker/base/all.yaml) holds each of the first three unready until
+  # its boot work settles, and Flux applies this one only once they are Ready at this revision.
+  dependsOn:
+  - name: worker-us-config
+  - name: worker-pl-config
+  - name: worker-es-config
   interval: 10m
   sourceRef:
     kind: GitRepository
@@ -368,11 +376,11 @@ spec:
   # be indistinguishable from a good one. The alert's `for: 30m` is what keeps an ordinary slow
   # rollout from paging.
   wait: true
-  # 6m, UP FROM THE 3m DEFAULT. The same 2026-09-21 audit that raised the web timeout to 10m
-  # measured a worker rollout at 3m19s to converge -- already past the old 3m timeout, just
-  # not caught retrying in the 48h window checked. Two samples only; see the web Kustomizations
-  # above for the full reasoning and the metric to watch before tightening this.
-  timeout: 6m
+  # 12m. A worker's rollout now converges only once its pod is READY, and ready means its boot
+  # work has settled (worker/base/all.yaml's readinessProbe): ~5 min on the US, capped at 8 by the
+  # worker itself. 12 leaves the image pull and a slow boot room under that cap. (It was 6m when a
+  # rollout converged at process start: 3m19s measured by the 2026-09-21 audit.)
+  timeout: 12m
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -380,6 +388,14 @@ metadata:
   name: worker-uk-config
   namespace: flux-system
 spec:
+  # ROLLED AFTER US, PL AND ES ARE READY: at most three workers boot at once. All five on one
+  # 8-core node at once saturated it (7.9 of 8 cores, 2026-09-30) and every boot ran several times
+  # slower; the readiness probe (worker/base/all.yaml) holds each of the first three unready until
+  # its boot work settles, and Flux applies this one only once they are Ready at this revision.
+  dependsOn:
+  - name: worker-us-config
+  - name: worker-pl-config
+  - name: worker-es-config
   interval: 10m
   sourceRef:
     kind: GitRepository
@@ -394,11 +410,11 @@ spec:
   # be indistinguishable from a good one. The alert's `for: 30m` is what keeps an ordinary slow
   # rollout from paging.
   wait: true
-  # 6m, UP FROM THE 3m DEFAULT. The same 2026-09-21 audit that raised the web timeout to 10m
-  # measured a worker rollout at 3m19s to converge -- already past the old 3m timeout, just
-  # not caught retrying in the 48h window checked. Two samples only; see the web Kustomizations
-  # above for the full reasoning and the metric to watch before tightening this.
-  timeout: 6m
+  # 12m. A worker's rollout now converges only once its pod is READY, and ready means its boot
+  # work has settled (worker/base/all.yaml's readinessProbe): ~5 min on the US, capped at 8 by the
+  # worker itself. 12 leaves the image pull and a slow boot room under that cap. (It was 6m when a
+  # rollout converged at process start: 3m19s measured by the 2026-09-21 audit.)
+  timeout: 12m
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -420,11 +436,11 @@ spec:
   # be indistinguishable from a good one. The alert's `for: 30m` is what keeps an ordinary slow
   # rollout from paging.
   wait: true
-  # 6m, UP FROM THE 3m DEFAULT. The same 2026-09-21 audit that raised the web timeout to 10m
-  # measured a worker rollout at 3m19s to converge -- already past the old 3m timeout, just
-  # not caught retrying in the 48h window checked. Two samples only; see the web Kustomizations
-  # above for the full reasoning and the metric to watch before tightening this.
-  timeout: 6m
+  # 12m. A worker's rollout now converges only once its pod is READY, and ready means its boot
+  # work has settled (worker/base/all.yaml's readinessProbe): ~5 min on the US, capped at 8 by the
+  # worker itself. 12 leaves the image pull and a slow boot room under that cap. (It was 6m when a
+  # rollout converged at process start: 3m19s measured by the 2026-09-21 audit.)
+  timeout: 12m
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -446,8 +462,8 @@ spec:
   # be indistinguishable from a good one. The alert's `for: 30m` is what keeps an ordinary slow
   # rollout from paging.
   wait: true
-  # 6m, UP FROM THE 3m DEFAULT. The same 2026-09-21 audit that raised the web timeout to 10m
-  # measured a worker rollout at 3m19s to converge -- already past the old 3m timeout, just
-  # not caught retrying in the 48h window checked. Two samples only; see the web Kustomizations
-  # above for the full reasoning and the metric to watch before tightening this.
-  timeout: 6m
+  # 12m. A worker's rollout now converges only once its pod is READY, and ready means its boot
+  # work has settled (worker/base/all.yaml's readinessProbe): ~5 min on the US, capped at 8 by the
+  # worker itself. 12 leaves the image pull and a slow boot room under that cap. (It was 6m when a
+  # rollout converged at process start: 3m19s measured by the 2026-09-21 audit.)
+  timeout: 12m
