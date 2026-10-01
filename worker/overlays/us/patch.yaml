@@ -65,8 +65,8 @@ data:
   # and the corpus of live slots all scale with it. 1024m was NOT enough: on 2026-09-03T03:40 the
   # JVM died with `OutOfMemoryError: Java heap space` after ~7h, while the cgroup peaked at 1.3G of
   # the 2Gi below — the heap, not the limit, was the binding constraint, so the container was never
-  # OOM-killed and raising the limit would have changed nothing. 1280m + ~290 MB non-heap still
-  # leaves ~220 MB inside the 2Gi, which NodeMemoryBudgetSpec checks both ways.
+  # OOM-killed and raising the limit would have changed nothing. 1280m + 288m of declared non-heap
+  # ceilings + native fits the 2304Mi limit below, which NodeMemoryBudgetSpec checks both ways.
   #
   # SerialGC and a pinned heap are carried from Fly verbatim -- they were the
   # fix for an OOM-restart loop under G1, and re-tuning them is a separate change from adding a
@@ -106,7 +106,15 @@ spec:
               # written. So eviction safety comes from the REQUEST SITTING ABOVE THE MEASURED
               # PEAK, not from the limit matching it: the kubelet ranks Burstable pods by how far
               # past their own request they have gone. `NodeMemoryBudgetSpec` holds both bounds.
-              memory: 2Gi
+              #
+              # 2304Mi, NOT the 2Gi request, because THIS pod's RSS lives close to it: ~1650Mi
+              # steady and 1799Mi at its 7-day peak to 2026-10-01 (boot, `process_resident_memory_bytes`),
+              # leaving 249Mi -- 12% -- under a 2Gi ceiling. It was OOM-killed three times on
+              # 2026-09-30 (a since-reverted change pushed it to the limit). 2304Mi is 28% over that
+              # peak. The heap stays 1280m: the extra room is for native/non-heap growth, which no
+              # -Xmx caps. Raising only the LIMIT costs the scheduler nothing -- it admits on
+              # requests -- and k3s-worker-1 ran 9.4Gi used of 15.6Gi when this was set.
+              memory: 2304Mi
 ---
 apiVersion: v1
 kind: Service
