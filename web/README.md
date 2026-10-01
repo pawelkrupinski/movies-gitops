@@ -67,11 +67,10 @@ sitemap is an INDEX of the three mounted countries, not a list of Poland's citie
 name that does not yet resolve to `2.28.47.31` fails issuance and the browser gets a hard TLS
 error rather than a degraded page.
 
-## The two secrets, and why they are not in git
+## The secret, and why it is not in git
 
 ```
 kinowo/web-secrets    Mongo, TMDB/OMDb, the OAuth client pairs, Sentry, the admin allowlist
-kinowo/ghcr-pull      a dockerconfigjson for ghcr.io, read:packages ONLY (shared with the worker)
 ```
 
 Applied with `kubectl apply -f -` from a manifest built on the operator's machine out of the

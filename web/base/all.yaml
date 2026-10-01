@@ -130,8 +130,9 @@ spec:
       labels:
         app: web
     spec:
-      imagePullSecrets:
-      - name: ghcr-pull
+      # No imagePullSecrets: both ghcr.io packages are PUBLIC, so pulls are anonymous. The
+      # read:packages `ghcr-pull` token it used was revoked in the 2026-09-27 key sweep and held
+      # every pod in ImagePullBackOff for 35 minutes; a credential nobody needs cannot do that.
       nodeSelector:
         kubernetes.io/hostname: k3s-worker-1
       terminationGracePeriodSeconds: 30

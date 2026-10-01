@@ -21,17 +21,18 @@ are the only things standing between a fresh cluster and a running worker.
 kinowo/worker-secrets      credentials, SHARED by every country (identical: one Mongo user
                            with readWrite on all the databases, one TMDB/OMDb/Zyte key set) (Mongo, TMDB, OMDb, Zyte, Telegram,
                            the Decodo proxy, Sentry)
-kinowo/ghcr-pull           a dockerconfigjson for ghcr.io, read:packages ONLY
 ```
 
 They are applied with `kubectl apply -f -` from a manifest built on the operator's machine out of
 the repo-root `.env.local`, piped over SSH rather than passed as arguments — an argv would put every
 value into the remote process list for as long as the command ran.
 
-`ghcr-pull` is a **read-only** token on purpose, and specifically NOT the token CI pushes with and
-NOT a Fly token. Nothing in this cluster should hold a credential that can deploy to production
-somewhere else; that is the same reasoning that keeps `fleet.prometheus.scrapeFly` switched off on
-monitoring-1.
+Images pull ANONYMOUSLY: both ghcr.io packages are public, so the cluster holds no registry
+credential at all (the old read:packages `kinowo/ghcr-pull` was revoked in the 2026-09-27 key sweep
+and stalled every pod in ImagePullBackOff). Nothing in this cluster should hold a credential that
+can deploy to production somewhere else; that is the same reasoning that keeps
+`fleet.prometheus.scrapeFly` switched off on monitoring-1. If a package is ever made private again,
+re-add `imagePullSecrets` together with the secret, or every new tag stops pulling.
 
 ## MONGODB_URI points at the private address
 
