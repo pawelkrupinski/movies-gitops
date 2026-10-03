@@ -11,7 +11,7 @@ data:
   # rendering the same `web` binary as the Polish site. SINGULAR -- the worker's variable is
   # KINOWO_COUNTRIES.
   KINOWO_COUNTRY: "us"
-  # HEAP: 1024m, against the base's 384m, and the US is the only country that needs it.
+  # HEAP: 768m (1024m 2026-09-03..10-03), against the base's 384m, and the US is the only country that needs it.
   #
   # The base sizing assumes a page is bounded by "one city's films", which holds for
   # a Polish city or a UK county but NOT for a US state: California is ONE city with
@@ -32,6 +32,14 @@ data:
   # limit) -- headroom, no longer generous, and the request is untouched so the node
   # budget is unchanged.
   #
+  # 2026-10-03: BACK TO 768m. The live set fell from ~565 MiB to ~350 MiB (G1 Old Gen
+  # after GC, its low point) once booking URLs were held split at their row's prefix and
+  # showtime instants shared, and the transients that filled the heap are gone: a listing
+  # render allocated ~320 MB and now ~5 MB (streamed showings, cached cards), pages are ~2x
+  # smaller, and a drift reload streams instead of holding two corpora. 768m is ~2.2x the
+  # live set, the same ratio 1024m gave the old one; RSS peaked at 1524 MiB on 1024m, so
+  # ~1270 MiB is expected under the 1536Mi limit below.
+  #
   # A cheaper fix exists and is NOT done here: a heap dump of worker-us showed 66.7%
   # of all String payload is duplicate (5,874,828 byte[] holding 1,956,716 distinct
   # values -- 'action' x66,106, 'PG-13' x30,315, '2D' x21,224), worth ~257 MiB to an
@@ -41,9 +49,9 @@ data:
   # Everything else is the base's string verbatim; a ConfigMap patch replaces the
   # whole key, so it has to be restated rather than appended to. Non-heap is
   # unchanged (160m metaspace + 96m code cache + 64m direct), which is what sets the
-  # 2Gi limit below: 1024 + 320 + JVM overhead sits inside it.
+  # 1536Mi limit below: 768 + 320 + JVM overhead sits inside it.
   JAVA_OPTS: >-
-    -Xms1024m -Xmx1024m -XX:+UseG1GC -XX:MaxGCPauseMillis=50 -XX:+UseStringDeduplication -XX:ReservedCodeCacheSize=96m -XX:MaxMetaspaceSize=160m -XX:MaxDirectMemorySize=64m -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log
+    -Xms768m -Xmx768m -XX:+UseG1GC -XX:MaxGCPauseMillis=50 -XX:+UseStringDeduplication -XX:ReservedCodeCacheSize=96m -XX:MaxMetaspaceSize=160m -XX:MaxDirectMemorySize=64m -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -64,7 +72,7 @@ spec:
             requests:
               # CPU as UK and DE: half Poland's.
               #
-              # MEMORY IS THE US EXCEPTION -- 2Gi, not the base 1Gi. The note that used to sit
+              # MEMORY IS THE US EXCEPTION -- 1536Mi (2Gi until 2026-10-03), not the base 1Gi. The note that used to sit
               # here said the big roster was "a WORKER-side cost" because "the web tier serves
               # one city at a time and its MovieCache is sized by films on screen, not by venues
               # scraped". That is true of every country except this one: a US city IS a state,
@@ -85,9 +93,9 @@ spec:
               # alone is 486 venues in one 18.9 MB page. Revisit once a state's page is split per
               # metro (/:city/:area/); that is what makes this the largest web request.
               cpu: "750m"
-              memory: 2Gi
+              memory: 1536Mi
             limits:
-              memory: 2Gi
+              memory: 1536Mi
 ---
 apiVersion: v1
 kind: Service
