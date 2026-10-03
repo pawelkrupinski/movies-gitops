@@ -57,7 +57,7 @@ spec:
       - name: filmowo
         # Written by image-automation (see image-automation/automation.yaml); pin or roll back by
         # editing the tag.
-        image: ghcr.io/pawelkrupinski/filmowo:main-20261003204155-541b7ce # {"$imagepolicy": "flux-system:filmowo"}
+        image: ghcr.io/pawelkrupinski/filmowo:main-20261003210347-8325002 # {"$imagepolicy": "flux-system:filmowo"}
         imagePullPolicy: IfNotPresent
         envFrom:
         - configMapRef:
