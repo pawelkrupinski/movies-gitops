@@ -1,0 +1,122 @@
+# filmowo (github.com/pawelkrupinski/recommend) -- a separate product sharing this node, moved off
+# Fly.io. Node 24 on :9002, SQLite on local disk made durable by Litestream streaming to Cloudflare
+# R2 and restoring on boot (the image's docker-entrypoint.sh). Served as filmowo.kinowo.net:
+# Cloudflare -> Caddy on k3s-worker-1 (infra/nix/hosts/k3s-worker-1 in the app repo) -> the
+# NodePort below.
+#
+# ⚠️ EXACTLY ONE WRITER, EVER. Litestream assumes it is the only process replicating to its R2 path.
+# Two pods (or this pod and the old Fly machine) replicating at once fork the generations, and the
+# next restore can come back without the other one's writes. Hence `replicas: 1` with `Recreate`
+# (the old pod has stopped and done its final sync before the new one restores) and no PDB/surge.
+#
+# Secrets (`filmowo-secrets`) are applied out of band from the app repo's .env.local, like
+# kinowo/web-secrets -- they never live in git.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: filmowo
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: filmowo-env
+  namespace: filmowo
+data:
+  NODE_ENV: production
+  DB_PATH: /data/recommend.db
+  BASE_URL: https://filmowo.kinowo.net
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: filmowo
+  namespace: filmowo
+  annotations:
+    reloader.stakater.com/auto: "true"
+  labels:
+    app: filmowo
+spec:
+  # 0 until the cutover: the Fly machine still replicates to the same R2 path (see the header).
+  replicas: 0
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: filmowo
+  template:
+    metadata:
+      labels:
+        app: filmowo
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: k3s-worker-1
+      # Litestream forwards SIGTERM to node and does a final sync to R2 before exiting; the grace
+      # period covers that sync.
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: filmowo
+        # Written by image-automation (see image-automation/automation.yaml); pin or roll back by
+        # editing the tag.
+        image: ghcr.io/pawelkrupinski/filmowo:main-20261003204155-541b7ce # {"$imagepolicy": "flux-system:filmowo"}
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - configMapRef:
+            name: filmowo-env
+        - secretRef:
+            name: filmowo-secrets
+        ports:
+        - name: http
+          containerPort: 9002
+        resources:
+          # Fly ran it on a 512 MB VM; the limit keeps that ceiling. No CPU limit, like the rest of
+          # the node. Counted in NodeMemoryBudgetSpec / NodeCpuBudgetSpec in the app repo.
+          requests:
+            cpu: 50m
+            memory: 256Mi
+          limits:
+            memory: 512Mi
+        # A cold boot restores the DB from R2 first (~40 s on Fly), retrying up to 5 times.
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+          periodSeconds: 10
+          failureThreshold: 18
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          periodSeconds: 15
+          timeoutSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 4
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      volumes:
+      # Scratch: the durable copy is the R2 replica, restored on every fresh pod.
+      - name: data
+        emptyDir:
+          sizeLimit: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: filmowo
+  namespace: filmowo
+  labels:
+    app: filmowo
+spec:
+  type: NodePort
+  selector:
+    app: filmowo
+  ports:
+  - name: http
+    port: 9002
+    targetPort: http
+    nodePort: 30920

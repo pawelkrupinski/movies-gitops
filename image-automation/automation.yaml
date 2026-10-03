@@ -120,6 +120,31 @@ spec:
     numerical:
       order: asc
 ---
+# filmowo (github.com/pawelkrupinski/recommend), same tag scheme, published by that repo's ci.yml.
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImageRepository
+metadata:
+  name: filmowo
+  namespace: flux-system
+spec:
+  image: ghcr.io/pawelkrupinski/filmowo
+  interval: 5m
+---
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImagePolicy
+metadata:
+  name: filmowo
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: filmowo
+  filterTags:
+    pattern: '^main-(?P<ts>[0-9]{14})-[0-9a-f]{7}$'
+    extract: '$ts'
+  policy:
+    numerical:
+      order: asc
+---
 apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImageUpdateAutomation
 metadata:
@@ -152,6 +177,6 @@ spec:
       branch: main
   update:
     # Scoped to the manifests, so the automation can only ever rewrite a marked image line. The
-    # markers are the `# {"$imagepolicy": "flux-system:<policy>"}` comments in web/ and worker/.
+    # markers are the `# {"$imagepolicy": "flux-system:<policy>"}` comments in web/, worker/ and filmowo/.
     path: ./
     strategy: Setters
