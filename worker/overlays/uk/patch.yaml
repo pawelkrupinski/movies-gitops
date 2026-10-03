@@ -16,31 +16,10 @@ data:
   # corpus. MONGODB_DB is never set -- it would override that and merge all three.
   KINOWO_COUNTRIES: "uk"
 
-  # Identity phase 5: this country's films are the identity projection's, not the old pipeline's
-  # (docs/design/identity-cutover-runbook.md). Remove the line to switch back. The shadow run and its
-  # fill stand down on their own once this is set.
-  KINOWO_IDENTITY_CUTOVER: "uk"
-
-  # Identity migration: run the new resolver in SHADOW (from its TMDB store, no network), writing
-  # identity_shadow_decisions / identity_shadow_diff (8-day TTL) for /admin/identity and the
-  # old-vs-new gauges. Decides nothing served. ES/DE ticks: 3-11 s, heap ~200 MB of 433-649 MB.
-  # OFF 17:39-18:50 UTC 2026-09-28: the model's first take-up OOMed the 448m heap, its prefetch
-  # holding every question of the corpus at once. On again since the app's 59bfde228 reads in
-  # bounded slices (≤500 nodes / 1,000 detail pages / 2,000 records; UK model ~52 MB resident).
-  KINOWO_IDENTITY_SHADOW: "true"
-  # After each shadow tick, ask TMDB what the model's TMDB store cannot answer yet, paced at
-  # KINOWO_IDENTITY_SHADOW_LOOKUP_RATE (default 60/min; halves on 429/5xx); answers go only to
-  # that store. Proven in ES since 2026-09-26 (13k answers, 0 throttled, heap fine) — without it the
-  # shadow leaves most films "moved" (unanswered), so the cutover gate's ≥97% identical is unreachable.
-  KINOWO_IDENTITY_SHADOW_LOOKUPS: "true"
-  # 300/min: 5 req/s per worker, 25 across the five — half TMDB's ~50 req/s. At the 60/min default
-  # the fill trailed by ~9 h on 2026-09-28 (UK 34k, PL 15k lookups unanswered), holding the shadow's
-  # identical share at 62-84%. The pipeline's lookup chain still paces every host, venue pages included.
+  # The identity model's paced TMDB lookup fill: every 30 minutes it re-asks aged searches, applies
+  # TMDB's change lists and asks any question still open, at most this many a minute (halving on
+  # 429/5xx). 300/min: 5 req/s per worker, 25 across the five — half TMDB's ~50 req/s.
   KINOWO_IDENTITY_SHADOW_LOOKUP_RATE: "300"
-
-  # Identity phase 4: compare sampled slots/screenings' listingKey with today's slot key and report
-  # disagreements (gauge + capped log). Read-only; a week of full agreement gates the first dual read.
-  KINOWO_LISTING_KEY_SHADOW_READ: "true"
 
   # The dominant write-rate lever: how stale a cinema's scrape may get before it is re-scraped.
   KINOWO_SCRAPE_TASKS_PER_VENUE: "36"
