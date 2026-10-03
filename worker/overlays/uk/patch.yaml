@@ -16,6 +16,11 @@ data:
   # corpus. MONGODB_DB is never set -- it would override that and merge all three.
   KINOWO_COUNTRIES: "uk"
 
+  # Identity phase 5: this country's films are the identity projection's, not the old pipeline's
+  # (docs/design/identity-cutover-runbook.md). Remove the line to switch back. The shadow run and its
+  # fill stand down on their own once this is set.
+  KINOWO_IDENTITY_CUTOVER: "uk"
+
   # Identity migration: run the new resolver in SHADOW (from its TMDB store, no network), writing
   # identity_shadow_decisions / identity_shadow_diff (8-day TTL) for /admin/identity and the
   # old-vs-new gauges. Decides nothing served. ES/DE ticks: 3-11 s, heap ~200 MB of 433-649 MB.
