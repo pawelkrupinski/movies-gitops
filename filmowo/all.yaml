@@ -1,5 +1,5 @@
 # filmowo (github.com/pawelkrupinski/recommend) -- a separate product sharing this node, moved off
-# Fly.io. Node 24 on :9002, SQLite on local disk made durable by Litestream streaming to Cloudflare
+# Fly.io on 2026-10-03. Node 24 on :9002, SQLite on local disk made durable by Litestream streaming to Cloudflare
 # R2 and restoring on boot (the image's docker-entrypoint.sh). Served as filmowo.kinowo.net:
 # Cloudflare -> Caddy on k3s-worker-1 (infra/nix/hosts/k3s-worker-1 in the app repo) -> the
 # NodePort below.
@@ -36,8 +36,8 @@ metadata:
   labels:
     app: filmowo
 spec:
-  # 0 until the cutover: the Fly machine still replicates to the same R2 path (see the header).
-  replicas: 0
+  # Never above 1 (see the header). The Fly app was destroyed at the 2026-10-03 cutover.
+  replicas: 1
   strategy:
     type: Recreate
   selector:
