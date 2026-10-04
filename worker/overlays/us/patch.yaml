@@ -51,14 +51,18 @@ data:
   # and the corpus of live slots all scale with it. 1024m was NOT enough: on 2026-09-03T03:40 the
   # JVM died with `OutOfMemoryError: Java heap space` after ~7h, while the cgroup peaked at 1.3G of
   # the 2Gi below — the heap, not the limit, was the binding constraint, so the container was never
-  # OOM-killed and raising the limit would have changed nothing. 1280m + 288m of declared non-heap
-  # ceilings + native fits the 2304Mi limit below, which NodeMemoryBudgetSpec checks both ways.
+  # OOM-killed and raising the limit would have changed nothing. 1280m then.
+  # 1152m since 2026-10-04: three hours of `-Xlog:gc` (5 pods, a full re-resolve among them) put the
+  # live set after a full GC at median 449 MB, max 508 MB, once the identity projection stopped holding
+  # every archived showtime (8ecfe62ab) — 66% of a 768m old generation, against the 1024m that died with
+  # a far larger corpus graph. 1152m + 288m of declared non-heap ceilings + native fits the 2304Mi limit
+  # below, which NodeMemoryBudgetSpec checks both ways.
   #
   # SerialGC and a pinned heap are carried from Fly verbatim -- they were the
   # fix for an OOM-restart loop under G1, and re-tuning them is a separate change from adding a
   # country.
   JAVA_OPTS: >-
-    -Xms1280m -Xmx1280m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes= -Xlog:gc:stdout
+    -Xms1152m -Xmx1152m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes= -Xlog:gc:stdout
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -97,7 +101,7 @@ spec:
               # steady and 1799Mi at its 7-day peak to 2026-10-01 (boot, `process_resident_memory_bytes`),
               # leaving 249Mi -- 12% -- under a 2Gi ceiling. It was OOM-killed three times on
               # 2026-09-30 (a since-reverted change pushed it to the limit). 2304Mi is 28% over that
-              # peak. The heap stays 1280m: the extra room is for native/non-heap growth, which no
+              # peak. The heap is 1152m (above): the extra room is for native/non-heap growth, which no
               # -Xmx caps. Raising only the LIMIT costs the scheduler nothing -- it admits on
               # requests -- and k3s-worker-1 ran 9.4Gi used of 15.6Gi when this was set.
               memory: 2304Mi
