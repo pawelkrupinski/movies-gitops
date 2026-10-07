@@ -31,11 +31,14 @@ data:
   # OutOfMemoryError: Metaspace at its 128m cap four times on 09-28/29 with every class in metaspace.
   # The image's AOT cache now serves the classes production loads (aot-classes.txt), and PL's
   # metaspace sits at ~35 MB (VITALS, 12:40 UTC) — the cap is back to a ceiling, not a limit.
-  # -Xmn140m since 2026-10-07: the old gen sized a quarter over the 24 h live-set max (244 MB,
+  # -Xmn sized from the live set since 2026-10-07: the old gen a quarter over the 24 h live-set max (244 MB,
   # median 212; to 10:40 UTC), the rest young — capped at half the heap, past which a young collection's
   # survivors can outgrow the old gen. NodeMemoryBudgetSpec "a measured worker's old generation" holds it.
+  # 448m -> 512m (-Xmn140m -> 176m, old 308 -> 336) the same evening: on 448m PL ran 24 full GCs an hour
+  # with no boot among them, 2.1% of wall time in GC (14:25-16:40 UTC), its identity resolves (up to
+  # ~2,500 an hour) promoting 0.6 MB/s into ~100 MB of old-gen headroom, a young collection every 3.8 s.
   JAVA_OPTS: >-
-    -Xms448m -Xmx448m -Xmn140m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
+    -Xms512m -Xmx512m -Xmn176m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -73,7 +76,9 @@ spec:
               # written. So eviction safety comes from the REQUEST SITTING ABOVE THE MEASURED
               # PEAK, not from the limit matching it: the kubelet ranks Burstable pods by how far
               # past their own request they have gone. `NodeMemoryBudgetSpec` holds both bounds.
-              memory: 1Gi
+              # 1Gi -> 1088Mi with the 512m heap (2026-10-07): heap + 288Mi of non-heap ceilings + 256Mi
+              # untracked native.
+              memory: 1088Mi
 ---
 apiVersion: v1
 kind: Service
