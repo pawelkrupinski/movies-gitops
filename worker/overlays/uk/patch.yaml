@@ -32,8 +32,12 @@ data:
   # ran the 448m heap at 419-438m and SerialGC took 75-87% of wall time). The day's memory work cut
   # UK's old gen after GC 349 -> 232 MB peak THROUGH a full rebuild (15:52 UTC: resolves 44 s, full
   # GC <=1% of wall time), so 512m's ~341 MB old gen runs at ~68% at the heaviest moment.
+  # -Xmn100m since 2026-10-07: the default third (170 MB young) left the old gen 341 MB over a
+  # 268 MB median live set (p90 287), so every boot and every heavy tick ran back-to-back full
+  # collections — 11 a hour, 16.2 s/h, against 13.8 s/h for 244 young ones (24 h to 12:30 UTC).
+  # 100 MB young gives the old gen 412 MB, twice the headroom.
   JAVA_OPTS: >-
-    -Xms512m -Xmx512m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
+    -Xms512m -Xmx512m -Xmn100m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
 ---
 apiVersion: apps/v1
 kind: Deployment
