@@ -38,8 +38,13 @@ data:
   MALLOC_TRIM_THRESHOLD_: '131072'
   KINOWO_LOG_DIR: /data/logs
   # The per-country disk budget for the share cards under /share-cards (see the volume below);
-  # the worker prunes non-current cards oldest-first to stay under it.
-  KINOWO_SHARE_CARD_BUDGET_MB: '1024'
+  # the worker prunes non-current cards oldest-first to stay under it, and once what it may not
+  # prune exceeds it, writes no NEW card. 3 GiB: de's film cards alone were 1.23 GB on 2026-10-12
+  # (over the old 1 GiB), and each country now also keeps one ~120 KB card per city (us ~2,000
+  # cities, ~240 MB). Five countries at the cap are 15 GiB of k3s-worker-1's 160 GB root.
+  KINOWO_SHARE_CARD_BUDGET_MB: '3072'
+  # Below this much free space on that root the worker writes no new share-card file at all.
+  KINOWO_SHARE_CARD_MIN_FREE_MB: '4096'
   # The worker's own Telegram alerts (Filmweb fallback enter/recover, Filmweb drops, staging stuck)
   # go to the "Kinowo Monitoring" group; without these the alerters are wired OFF. Lost when the
   # workers left Fly (movies 7beff659b). TELEGRAM_BOT_TOKEN comes from worker-secrets.
