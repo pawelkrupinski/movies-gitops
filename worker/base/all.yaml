@@ -37,12 +37,10 @@ data:
   MALLOC_ARENA_MAX: '2'
   MALLOC_TRIM_THRESHOLD_: '131072'
   KINOWO_LOG_DIR: /data/logs
-  # The per-country disk budget for the share cards under /share-cards (see the volume below);
-  # the worker prunes non-current cards oldest-first to stay under it, and once what it may not
-  # prune exceeds it, writes no NEW card. 3 GiB: de's film cards alone were 1.23 GB on 2026-10-12
-  # (over the old 1 GiB), and each country now also keeps one ~120 KB card per city (us ~2,000
-  # cities, ~240 MB). Five countries at the cap are 15 GiB of k3s-worker-1's 160 GB root.
-  KINOWO_SHARE_CARD_BUDGET_MB: '3072'
+  # The share-card disk budget is the worker's own default (ShareCardWiring.DefaultBudgetMb, 6 GiB per
+  # country since 2026-10-12: de's film cards plus one card per city outgrew 3 GiB); set
+  # KINOWO_SHARE_CARD_BUDGET_MB here only to override it. Five countries at 6 GiB are 30 GiB of
+  # k3s-worker-1's 160 GB root; the free-space floor below guards the node.
   # Below this much free space on that root the worker writes no new share-card file at all.
   KINOWO_SHARE_CARD_MIN_FREE_MB: '4096'
   # The worker's own Telegram alerts (Filmweb fallback enter/recover, Filmweb drops, staging stuck)
