@@ -39,7 +39,8 @@ data:
   # NodeMemoryBudgetSpec "a measured worker's old generation" holds it.
   # -Xmx832m since 2026-10-12: the per-venue sources (Cineamo, kinoheld) took the corpus from 1,890
   # films to 5,022 overnight and the live set from 314 MB to 423 MB, past the 400 MB old gen -- full
-  # all morning, ~19 full GCs a minute reclaiming nothing. 592 MB of old gen is 1.25 x 474.
+  # all morning, ~19 full GCs a minute reclaiming nothing. 592 MB of old gen is 1.4 x the 423 MB live set
+  # (a quarter of headroom over up to 474 MB as the corpus keeps filling in).
   JAVA_OPTS: >-
     -Xms832m -Xmx832m -Xmn240m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
 ---
