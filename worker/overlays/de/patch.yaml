@@ -34,11 +34,14 @@ data:
   # Identical to the other countries except the heap. Carried from Fly verbatim: SerialGC and a
   # small pinned heap were the fix for an OOM-restart loop under G1, and re-tuning them is a
   # separate change from moving the process.
-  # -Xmn240m since 2026-10-07: the old gen sized a quarter over the 24 h live-set max (314 MB,
-  # median 270; to 10:40 UTC), the rest young — capped at half the heap, past which a young collection's
-  # survivors can outgrow the old gen. NodeMemoryBudgetSpec "a measured worker's old generation" holds it.
+  # -Xmn240m since 2026-10-07: the old gen sized a quarter over the live-set max, the rest young —
+  # capped at half the heap, past which a young collection's survivors can outgrow the old gen.
+  # NodeMemoryBudgetSpec "a measured worker's old generation" holds it.
+  # -Xmx832m since 2026-10-12: the per-venue sources (Cineamo, kinoheld) took the corpus from 1,890
+  # films to 5,022 overnight and the live set from 314 MB to 423 MB, past the 400 MB old gen -- full
+  # all morning, ~19 full GCs a minute reclaiming nothing. 592 MB of old gen is 1.25 x 474.
   JAVA_OPTS: >-
-    -Xms640m -Xmx640m -Xmn240m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
+    -Xms832m -Xmx832m -Xmn240m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -66,7 +69,8 @@ spec:
               # put worker de at 963Mi on 2026-09-07; this sits above that peak with headroom
               # rather than at the round worker default, which reserved surge budget it never
               # touched. The limit below is unchanged -- only the SCHEDULER's number moves.
-              memory: 1280Mi
+              # Re-measured 2026-10-12: 1054Mi on the 640m heap; the 832m heap adds ~192Mi to that.
+              memory: 1408Mi
             limits:
               # The limit is the OOM CEILING; the request above is what the SCHEDULER reserves.
               # They are no longer equal, and this was never Guaranteed QoS whatever an earlier
