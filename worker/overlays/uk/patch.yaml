@@ -25,9 +25,9 @@ data:
   KINOWO_SCRAPE_TASKS_PER_VENUE: "36"
   KINOWO_SCRAPE_FRESHNESS_MINUTES: "420"
 
-  # Identical to the other countries except the heap. Carried from Fly verbatim: SerialGC and a
-  # small pinned heap were the fix for an OOM-restart loop under G1, and re-tuning them is a
-  # separate change from moving the process.
+  # Identical to the other countries except the heap. The collector is not named here: it is the
+  # launcher's (infra/jvm/worker.options, the Parallel collector since 2026-10-24, SerialGC before);
+  # the small pinned heap (-Xms = -Xmx) is carried from Fly.
   # 512m since 2026-09-29 16:30 UTC (448m -> 640m that morning, when the identity model's take-up
   # ran the 448m heap at 419-438m and SerialGC took 75-87% of wall time). The day's memory work cut
   # UK's old gen after GC 349 -> 232 MB peak THROUGH a full rebuild (15:52 UTC: resolves 44 s, full
@@ -39,7 +39,7 @@ data:
   # 512m -> 640m (-Xmn160m, old 480) the same evening: back to the heap UK ran until 2026-09-29, whose
   # 1073 MiB RSS peak the request was measured against — the GC on 512m was the cost of the cut.
   JAVA_OPTS: >-
-    -Xms640m -Xmx640m -Xmn160m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
+    -Xms640m -Xmx640m -Xmn160m -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
 ---
 apiVersion: apps/v1
 kind: Deployment

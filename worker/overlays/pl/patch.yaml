@@ -24,9 +24,9 @@ data:
   # The dominant write-rate lever: how stale a cinema's scrape may get before it is re-scraped.
   KINOWO_SCRAPE_FRESHNESS_MINUTES: "60"
 
-  # Identical to the other countries except the heap. Carried from Fly verbatim: SerialGC and a
-  # small pinned heap were the fix for an OOM-restart loop under G1, and re-tuning them is a
-  # separate change from moving the process.
+  # Identical to the other countries except the heap. The collector is not named here: it is the
+  # launcher's (infra/jvm/worker.options, the Parallel collector since 2026-10-24, SerialGC before);
+  # the small pinned heap (-Xms = -Xmx) is carried from Fly.
   # MaxMetaspaceSize back to 128m (2026-09-29, after a 192m stopgap that morning): PL died of
   # OutOfMemoryError: Metaspace at its 128m cap four times on 09-28/29 with every class in metaspace.
   # The image's AOT cache now serves the classes production loads (aot-classes.txt), and PL's
@@ -38,7 +38,7 @@ data:
   # with no boot among them, 2.1% of wall time in GC (14:25-16:40 UTC), its identity resolves (up to
   # ~2,500 an hour) promoting 0.6 MB/s into ~100 MB of old-gen headroom, a young collection every 3.8 s.
   JAVA_OPTS: >-
-    -Xms512m -Xmx512m -Xmn176m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
+    -Xms512m -Xmx512m -Xmn176m -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
 ---
 apiVersion: apps/v1
 kind: Deployment

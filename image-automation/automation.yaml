@@ -37,9 +37,8 @@
 #     then add the printed public key at Settings -> Deploy keys with "Allow write access".
 #
 # ⚠️ TWO GitRepositories ON PURPOSE. The `movies` source in gotk-sync.yaml keeps reading over
-# ANONYMOUS https, because the repository is public and config reconciliation should not depend on
-# a credential that can be revoked. Only the automation below uses the authenticated ssh source, so
-# revoking or breaking the deploy key stops DEPLOYS and leaves config reconciliation working --
+# The read source (flux/gotk-sync.yaml) has its own read-only key; only the automation below uses
+# this WRITE key, so revoking or breaking it stops DEPLOYS and leaves config reconciliation working --
 # and it fails loudly rather than silently, because the automation reports NotReady.
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
@@ -52,7 +51,7 @@ spec:
   # ssh, not https, because this is the one that has to PUSH. The secret carries `identity`,
   # `identity.pub` and `known_hosts`; a missing known_hosts is the usual first failure and reads as
   # "host key verification failed" in the automation's events.
-  url: ssh://git@github.com/pawelkrupinski/movies-gitops
+  url: ssh://forgejo@162.55.0.154:2222/pawelkrupinski/movies-gitops.git
   secretRef:
     name: flux-git-write
   ref:
@@ -76,7 +75,13 @@ metadata:
   name: movies-web
   namespace: flux-system
 spec:
-  image: ghcr.io/pawelkrupinski/movies-web
+  # registry.kinowo.net (movies infra/nix/modules/roles/registry.nix), not ghcr.io: the GitHub
+  # account was suspended 2026-10 and CI moved to Forgejo, which pushes here. Reads are anonymous,
+  # so this needs no secretRef. Only the ImageRepository was switched by hand: the deployments'
+  # setter lines still name the last ghcr build, and image-automation rewrites them to this
+  # registry (name AND tag) at the first `main-*` tag CI publishes here -- so nothing pointed at
+  # an image that did not exist yet.
+  image: registry.kinowo.net/movies-web
   # Five minutes, matching the config source: this is the floor on how long a green build waits
   # before it is live, and the registry call is cheap.
   interval: 5m
@@ -102,7 +107,8 @@ metadata:
   name: movies-worker
   namespace: flux-system
 spec:
-  image: ghcr.io/pawelkrupinski/movies-worker
+  # registry.kinowo.net, as movies-web above.
+  image: registry.kinowo.net/movies-worker
   interval: 5m
 ---
 apiVersion: image.toolkit.fluxcd.io/v1
@@ -120,14 +126,15 @@ spec:
     numerical:
       order: asc
 ---
-# filmowo (github.com/pawelkrupinski/recommend), same tag scheme, published by that repo's ci.yml.
+# filmowo (pawelkrupinski/recommend on Forgejo), same tag scheme, published by that repo's ci.yml to
+# registry.kinowo.net as movies' images are (ghcr.io until the GitHub suspension). Reads are anonymous.
 apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImageRepository
 metadata:
   name: filmowo
   namespace: flux-system
 spec:
-  image: ghcr.io/pawelkrupinski/filmowo
+  image: registry.kinowo.net/filmowo
   interval: 5m
 ---
 apiVersion: image.toolkit.fluxcd.io/v1

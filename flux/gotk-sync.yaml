@@ -48,12 +48,13 @@
 # bad component version can break the thing that would have rolled it back, so gotk-components.yaml
 # is applied by hand and upgrading Flux is a re-apply. Revisit at stage 3.
 #
-# NO GIT CREDENTIAL ON THIS SOURCE, because pawelkrupinski/movies-gitops is public. Nothing to
-# rotate, nothing to leak, and reading config does not depend on a key anyone can revoke. The
-# authenticated source is a SEPARATE one — `movies-write` in image-automation/automation.yaml,
-# which needs a deploy key because it pushes. Keeping them apart is deliberate: revoking that key
-# stops DEPLOYS and leaves config reconciliation working, and it fails loudly rather than silently.
-# If this repository is ever made private, this file needs a `secretRef` and a read-only key too.
+# A READ-ONLY DEPLOY KEY ON THIS SOURCE, since 2026-10. The repository used to be public on
+# github.com and this source read it anonymously; the GitHub account was suspended and the repo now
+# lives, private, on the self-hosted Forgejo on bitcashier's ci-runner (162.55.0.154), reached over
+# git-ssh on :2222 -- the one port that host admits publicly, and only from this cluster's nodes.
+# The write path is still a SEPARATE source with its own key (`movies-write` in
+# image-automation/automation.yaml), so revoking the write key stops DEPLOYS and leaves config
+# reconciliation working. `flux-git-read` carries `identity`, `identity.pub` and `known_hosts`.
 #
 # ------------------------------------------------------------------------------------------------
 # WHY THIS IS ITS OWN REPOSITORY
@@ -76,7 +77,9 @@ spec:
   # Five minutes: fast enough that a hand-applied hotfix is reverted-or-confirmed within one coffee,
   # slow enough that a public clone of a repository this size is not a background job.
   interval: 5m
-  url: https://github.com/pawelkrupinski/movies-gitops
+  url: ssh://forgejo@162.55.0.154:2222/pawelkrupinski/movies-gitops.git
+  secretRef:
+    name: flux-git-read
   ref:
     branch: main
 ---

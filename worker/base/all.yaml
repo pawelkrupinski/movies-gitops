@@ -31,6 +31,9 @@ metadata:
   name: worker-env
   namespace: kinowo
 data:
+  # The fleet's shared state (Facebook re-scrape queue and quota, Facebook fetches, fleet host paces):
+  # services.FleetDatabase, docs/fleet-database-migration.md in the movies repo. Unset = Poland's kinowo.
+  MONGODB_FLEET_DB: kinowo_fleet
   PORT: '9000'
   KINOWO_BOOT_HYDRATE_MAX_ATTEMPTS: '20'
   KINOWO_WORKER_POOL_SIZE: '4'
@@ -104,7 +107,7 @@ spec:
         #
         # NOT `latest`, ever: a pod restarting under a moving tag can come back on a
         # different build with nothing recording which. The value below is a real build.
-        image: ghcr.io/pawelkrupinski/movies-worker:main-20261015233458-8b75b70 # {"$imagepolicy": "flux-system:movies-worker"}
+        image: registry.kinowo.net/movies-worker:main-20261030200210-6f7b3da # {"$imagepolicy": "flux-system:movies-worker"}
         imagePullPolicy: IfNotPresent
         # WHICH DIRECTORY OF THE NODE'S HEAP-DUMP HOSTPATH THIS POD WRITES TO -- see the `heapdumps`
         # volume below. Read off the pod's own labels (the overlay adds `country`), so the base
@@ -172,11 +175,16 @@ spec:
         # most three workers boot at once. Five at once had k3s-worker-1 at 7.9 of 8 cores
         # (2026-09-30) and every boot several times slower. Readiness never restarts a pod; /health
         # above stays the liveness signal and answers from the first second of a boot.
+        # timeoutSeconds MATCHES /health's: SerialGC's full collections stop the whole JVM for 2-4 s,
+        # 7-12 times an hour per worker (jvm_gc_collection_seconds, MarkSweepCompact, 2026-10-21), and
+        # under kubelet's default 1 s every probe landing in one failed with "context deadline exceeded"
+        # and flipped a settled worker NotReady. /ready itself only reads a flag.
         readinessProbe:
           httpGet:
             path: /ready
             port: health
           periodSeconds: 10
+          timeoutSeconds: 10
           failureThreshold: 1
         volumeMounts:
         - name: data

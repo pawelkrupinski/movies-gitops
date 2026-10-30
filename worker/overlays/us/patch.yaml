@@ -57,12 +57,16 @@ data:
   # every archived showtime (8ecfe62ab) — 66% of a 768m old generation, against the 1024m that died with
   # a far larger corpus graph. 1152m + 288m of declared non-heap ceilings + native fits the 2304Mi limit
   # below, which NodeMemoryBudgetSpec checks both ways.
+  # 1280m with -Xmn384m (896 MiB old) since 2026-10-24: the nightly identity drift check (a whole resolve of
+  # every listing beside the model's own, first run an hour after boot inside 01:00-06:00 local) pushed the 768 MiB
+  # old gen (525 -> 768) to its cap, ~80 full GCs in 9 min reclaiming nothing, and the pod died at 06:11:46Z (and
+  # ~06:10Z on 10-23). A stopgap while that resolve's peak is cut; 896 old over the 605 live-set max, young 384
+  # (under half). Request and limit rose by the same 128Mi.
   #
-  # SerialGC and a pinned heap are carried from Fly verbatim -- they were the
-  # fix for an OOM-restart loop under G1, and re-tuning them is a separate change from adding a
-  # country.
+  # The collector is not named here: it is the launcher's (infra/jvm/worker.options, the Parallel collector
+  # since 2026-10-24, SerialGC before); the pinned heap (-Xms = -Xmx) is carried from Fly.
   JAVA_OPTS: >-
-    -Xms1152m -Xmx1152m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
+    -Xms1280m -Xmx1280m -Xmn384m -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -89,7 +93,9 @@ spec:
               # 1792Mi: RSS peaked at 1528Mi across six boots in the 4h after the heap went
               # 1280m -> 1152m (2026-10-04 10:25-14:42 UTC); under 1280m every 30-minute max sat at
               # 1570-1620Mi. 17% over the new peak; NodeMemoryBudgetSpec.MeasuredPeakMib holds it.
-              memory: 1792Mi
+              # +128Mi on 2026-10-24 with the heap's 1152m -> 1280m: NodeMemoryBudgetSpec derives the peak as
+              # 1528 + 128 = 1656Mi until a new 7d peak is measured.
+              memory: 1920Mi
             limits:
               # The limit is the OOM CEILING; the request above is what the SCHEDULER reserves.
               # They are no longer equal, and this was never Guaranteed QoS whatever an earlier
@@ -107,7 +113,8 @@ spec:
               # peak. The heap is 1152m (above): the extra room is for native/non-heap growth, which no
               # -Xmx caps. Raising only the LIMIT costs the scheduler nothing -- it admits on
               # requests -- and k3s-worker-1 ran 9.4Gi used of 15.6Gi when this was set.
-              memory: 2304Mi
+              # 2432Mi since 2026-10-24: the heap went 1152m -> 1280m and the limit with it, +128Mi.
+              memory: 2432Mi
 ---
 apiVersion: v1
 kind: Service

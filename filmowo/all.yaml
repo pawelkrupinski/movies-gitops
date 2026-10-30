@@ -1,4 +1,4 @@
-# filmowo (github.com/pawelkrupinski/recommend) -- a separate product sharing this node, moved off
+# filmowo (pawelkrupinski/recommend, on Forgejo since the GitHub suspension) -- a separate product sharing this node, moved off
 # Fly.io on 2026-10-03. Node 24 on :9002, SQLite on local disk made durable by Litestream streaming to Cloudflare
 # R2 and restoring on boot (the image's docker-entrypoint.sh). Served as filmowo.kinowo.net:
 # Cloudflare -> Caddy on k3s-worker-1 (infra/nix/hosts/k3s-worker-1 in the app repo) -> the
@@ -57,7 +57,7 @@ spec:
       - name: filmowo
         # Written by image-automation (see image-automation/automation.yaml); pin or roll back by
         # editing the tag.
-        image: ghcr.io/pawelkrupinski/filmowo:main-20261010184204-3055d5a # {"$imagepolicy": "flux-system:filmowo"}
+        image: registry.kinowo.net/filmowo:main-20261025225558-060bf07 # {"$imagepolicy": "flux-system:filmowo"}
         imagePullPolicy: IfNotPresent
         envFrom:
         - configMapRef:
