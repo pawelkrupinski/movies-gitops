@@ -57,7 +57,7 @@ spec:
       - name: filmowo
         # Written by image-automation (see image-automation/automation.yaml); pin or roll back by
         # editing the tag.
-        image: registry.kinowo.net/filmowo:main-20261025225558-060bf07 # {"$imagepolicy": "flux-system:filmowo"}
+        image: registry.kinowo.net/filmowo:main-20261031174207-05c448f # {"$imagepolicy": "flux-system:filmowo"}
         imagePullPolicy: IfNotPresent
         envFrom:
         - configMapRef:
