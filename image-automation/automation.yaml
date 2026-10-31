@@ -51,7 +51,7 @@ spec:
   # ssh, not https, because this is the one that has to PUSH. The secret carries `identity`,
   # `identity.pub` and `known_hosts`; a missing known_hosts is the usual first failure and reads as
   # "host key verification failed" in the automation's events.
-  url: ssh://forgejo@162.55.0.154:2222/pawelkrupinski/movies-gitops.git
+  url: ssh://git@github.com/pawelkrupinski/movies-gitops.git
   secretRef:
     name: flux-git-write
   ref:

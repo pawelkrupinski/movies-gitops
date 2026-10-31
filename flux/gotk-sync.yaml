@@ -49,9 +49,10 @@
 # is applied by hand and upgrading Flux is a re-apply. Revisit at stage 3.
 #
 # A READ-ONLY DEPLOY KEY ON THIS SOURCE, since 2026-10. The repository used to be public on
-# github.com and this source read it anonymously; the GitHub account was suspended and the repo now
-# lives, private, on the self-hosted Forgejo on bitcashier's ci-runner (162.55.0.154), reached over
-# git-ssh on :2222 -- the one port that host admits publicly, and only from this cluster's nodes.
+# github.com and this source read it anonymously; from the GitHub suspension (2026-10-19) to the
+# return (github-return plan, Phase 3) it lived on the self-hosted Forgejo on bitcashier's ci-runner,
+# and now it is read from github.com again over ssh with a read-only deploy key
+# (movies infra/bin/flux-cutover-github mints it; flux-cutover-forgejo is the rollback).
 # The write path is still a SEPARATE source with its own key (`movies-write` in
 # image-automation/automation.yaml), so revoking the write key stops DEPLOYS and leaves config
 # reconciliation working. `flux-git-read` carries `identity`, `identity.pub` and `known_hosts`.
@@ -77,7 +78,7 @@ spec:
   # Five minutes: fast enough that a hand-applied hotfix is reverted-or-confirmed within one coffee,
   # slow enough that a public clone of a repository this size is not a background job.
   interval: 5m
-  url: ssh://forgejo@162.55.0.154:2222/pawelkrupinski/movies-gitops.git
+  url: ssh://git@github.com/pawelkrupinski/movies-gitops.git
   secretRef:
     name: flux-git-read
   ref:
