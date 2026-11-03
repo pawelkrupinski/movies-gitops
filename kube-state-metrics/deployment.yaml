@@ -105,7 +105,7 @@ spec:
           # BUMPING IT is a deliberate act: read the release notes for renamed or removed series,
           # then `kubectl -n monitoring set image deployment/kube-state-metrics kube-state-metrics=...`
           # and re-check the rules that read them.
-          image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.14.0
+          image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.20.0
           imagePullPolicy: IfNotPresent
           args:
             - --port=8080
