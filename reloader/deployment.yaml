@@ -130,7 +130,7 @@ spec:
       containers:
         - name: reloader
           # Pinned, like every other image in this directory that CI does not manage.
-          image: ghcr.io/stakater/reloader:v1.0.28
+          image: ghcr.io/stakater/reloader:v1.4.23
           args:
             # Restart by annotating the pod template, which is what makes this compose with CI:
             # `kubectl set image` writes a different field of the same object.
