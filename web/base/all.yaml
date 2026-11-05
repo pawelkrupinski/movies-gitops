@@ -150,7 +150,7 @@ spec:
         #
         # NOT `latest`, ever: a pod restarting under a moving tag can come back on a
         # different build with nothing recording which. The value below is a real build.
-        image: registry.kinowo.net/movies-web:main-20261105034548-8ac8585 # {"$imagepolicy": "flux-system:movies-web"}
+        image: registry.kinowo.net/movies-web:main-20261105050127-2df8e92 # {"$imagepolicy": "flux-system:movies-web"}
         imagePullPolicy: IfNotPresent
         # WHICH DIRECTORY OF THE NODE'S HEAP-DUMP HOSTPATH THIS POD WRITES TO -- see the `heapdumps`
         # volume below. Read off the pod's own labels (the overlay adds `country`), so the base
