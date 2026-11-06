@@ -126,6 +126,39 @@ spec:
     numerical:
       order: asc
 ---
+# THE ONE-COUNTRY CANARY (movies repo docs/design/identity-rollout.md; review 2026-11-06, P4). A second
+# scan of the SAME registry repository, with a policy of its own, that only the Spain overlay's
+# image line follows (worker/overlays/es/kustomization.yaml). On every ordinary deploy both scans
+# see the new tag within 5 minutes and all five workers roll as before. To roll Spain FIRST, the
+# fleet's scan is held -- `flux suspend image repository movies-worker` -- before the push lands:
+# its policy keeps the tag it last saw, so only Spain's line moves. After
+# `scripts/deploy-watch --image <tag> --countries es` passes, `flux resume image repository
+# movies-worker` rolls the other four. No feature flag, no app change: which image a worker runs is
+# still one fact in git per line.
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImageRepository
+metadata:
+  name: movies-worker-canary
+  namespace: flux-system
+spec:
+  image: registry.kinowo.net/movies-worker
+  interval: 5m
+---
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImagePolicy
+metadata:
+  name: movies-worker-canary
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: movies-worker-canary
+  filterTags:
+    pattern: '^main-(?P<ts>[0-9]{14})-[0-9a-f]{7}$'
+    extract: '$ts'
+  policy:
+    numerical:
+      order: asc
+---
 # filmowo (pawelkrupinski/recommend on Forgejo), same tag scheme, published by that repo's ci.yml to
 # registry.kinowo.net as movies' images are (ghcr.io until the GitHub suspension). Reads are anonymous.
 apiVersion: image.toolkit.fluxcd.io/v1
