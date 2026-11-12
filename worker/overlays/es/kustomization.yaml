@@ -28,4 +28,4 @@ patches:
 # policy, so holding the fleet's scan rolls Spain alone. Ordinarily both policies name the same tag.
 images:
   - name: registry.kinowo.net/movies-worker
-    newTag: main-20261112202709-2c16b57 # {"$imagepolicy": "flux-system:movies-worker-canary:tag"}
+    newTag: main-20261112211208-0bee8d7 # {"$imagepolicy": "flux-system:movies-worker-canary:tag"}
