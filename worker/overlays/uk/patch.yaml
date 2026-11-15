@@ -38,8 +38,12 @@ data:
   # 100 MB young gives the old gen 412 MB, twice the headroom.
   # 512m -> 640m (-Xmn160m, old 480) the same evening: back to the heap UK ran until 2026-09-29, whose
   # 1073 MiB RSS peak the request was measured against — the GC on 512m was the cost of the cut.
+  # 640m -> 736m (old 480 -> 576) on 2026-11-15: the live set after a full GC reached 448 MB (8-day max, p95 ~415) in the
+  # 480 MB old gen -- the identity model's ~6,500 retained departed listings (since 2026-11-03) on top of a live set already
+  # past the 308 MB this was sized for -- and full GCs outside a boot went ~8 an hour -> ~15 (JvmFullGcRateHigh, ten
+  # episodes 11-08..13). 576 is 1.29x that max (NodeMemoryBudgetSpec).
   JAVA_OPTS: >-
-    -Xms640m -Xmx640m -Xmn160m -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
+    -Xms736m -Xmx736m -Xmn160m -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -69,6 +73,7 @@ spec:
               # touched. The limit below is unchanged -- only the SCHEDULER's number moves.
               # 1280Mi since 2026-09-29 (DE's shape): the heap went 448m -> 640m, and RSS had peaked
               # at 929Mi on the 448m heap. Node requests 12.9Gi of 15.2Gi, with room for US's 2Gi surge.
+              # Unchanged by the 736m heap (2026-11-15): RSS peaked at 1109Mi on 640m, + 96Mi of heap = 1205Mi.
               memory: 1280Mi
             limits:
               # The limit is the OOM CEILING; the request above is what the SCHEDULER reserves.

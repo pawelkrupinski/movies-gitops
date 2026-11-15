@@ -37,8 +37,12 @@ data:
   # 448m -> 512m (-Xmn140m -> 176m, old 308 -> 336) the same evening: on 448m PL ran 24 full GCs an hour
   # with no boot among them, 2.1% of wall time in GC (14:25-16:40 UTC), its identity resolves (up to
   # ~2,500 an hour) promoting 0.6 MB/s into ~100 MB of old-gen headroom, a young collection every 3.8 s.
+  # 512m -> 592m (old 336 -> 416) on 2026-11-15: since the identity model kept every departed listing as an input
+  # (2026-11-03, 7 days since 11-07) PL holds ~4,800 kept listings beside ~10,100 billed, and its live set after a full GC
+  # reached 329 MB (8-day max, p95 ~310) in a 336 MB old gen -- 0.86-0.94 full after every collection, full GCs outside a
+  # boot ~5 an hour before -> 15-43 (JvmOldGenNearCap, JvmFullGcRateHigh). 416 is 1.26x that max (NodeMemoryBudgetSpec).
   JAVA_OPTS: >-
-    -Xms512m -Xmx512m -Xmn176m -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
+    -Xms592m -Xmx592m -Xmn176m -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -66,7 +70,8 @@ spec:
               # put worker pl at 800Mi on 2026-09-07; this sits above that peak with headroom
               # rather than at the round worker default, which reserved surge budget it never
               # touched. The limit below is unchanged -- only the SCHEDULER's number moves.
-              memory: 960Mi
+              # 960Mi -> 1088Mi with the 592m heap (2026-11-15): RSS peaked at 1006Mi over the 7 days on 512m, + 80Mi of heap.
+              memory: 1088Mi
             limits:
               # The limit is the OOM CEILING; the request above is what the SCHEDULER reserves.
               # They are no longer equal, and this was never Guaranteed QoS whatever an earlier
@@ -77,8 +82,8 @@ spec:
               # PEAK, not from the limit matching it: the kubelet ranks Burstable pods by how far
               # past their own request they have gone. `NodeMemoryBudgetSpec` holds both bounds.
               # 1Gi -> 1088Mi with the 512m heap (2026-10-07): heap + 288Mi of non-heap ceilings + 256Mi
-              # untracked native.
-              memory: 1088Mi
+              # untracked native. 1152Mi with the 592m heap (2026-11-15), the same sum.
+              memory: 1152Mi
 ---
 apiVersion: v1
 kind: Service
