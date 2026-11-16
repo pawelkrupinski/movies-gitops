@@ -41,8 +41,12 @@ data:
   # films to 5,022 overnight and the live set from 314 MB to 423 MB, past the 400 MB old gen -- full
   # all morning, ~19 full GCs a minute reclaiming nothing. 592 MB of old gen is 1.4 x the 423 MB live set
   # (a quarter of headroom over up to 474 MB as the corpus keeps filling in).
+  # -Xmn240m -> 192m (old 592 -> 640) on 2026-11-16, the heap unchanged: the live set after a full GC reached 541 MB over
+  # the 6 days to 11-16 (p95 493) in the 592 MB old gen, 1.09x -- the tightest worker. ~30 MB of each reading was the
+  # Parallel collector's dead wood (5% of the old gen, gone with the image's -XX:MarkSweepDeadRatio=0), so 640 is 1.25x
+  # the ~511 MB that is live (NodeMemoryBudgetSpec). Young collections ~720 an hour, ~17 ms each, a quarter more of them.
   JAVA_OPTS: >-
-    -Xms832m -Xmx832m -Xmn240m -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
+    -Xms832m -Xmx832m -Xmn192m -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
 ---
 apiVersion: apps/v1
 kind: Deployment
