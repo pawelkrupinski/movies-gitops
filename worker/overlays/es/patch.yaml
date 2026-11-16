@@ -57,8 +57,10 @@ data:
   # -Xmn224m since 2026-10-07: the old gen sized a quarter over the 24 h live-set max (107 MB,
   # median 92; to 10:40 UTC), the rest young — capped at half the heap, past which a young collection's
   # survivors can outgrow the old gen. NodeMemoryBudgetSpec "a measured worker's old generation" holds it.
+  # -Xmn224m -> 192m (old 224 -> 256) on 2026-11-16, the heap unchanged: the live set after a full GC had reached 184 MB
+  # over the 6 days to 11-16 (p95 133), 1.22x the 224 MB old gen and no longer the 107 this was sized for; 256 is 1.39x.
   JAVA_OPTS: >-
-    -Xms448m -Xmx448m -Xmn224m -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
+    -Xms448m -Xmx448m -Xmn192m -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=96m -XX:CICompilerCount=2 -XX:-UseTypeSpeculation -XX:PerMethodRecompilationCutoff=20 -XX:PerBytecodeRecompilationCutoff=20 -XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/heapdumps -XX:ErrorFile=/data/logs/hs_err_%p.log -Djdk.http.auth.tunneling.disabledSchemes=
 ---
 apiVersion: apps/v1
 kind: Deployment
