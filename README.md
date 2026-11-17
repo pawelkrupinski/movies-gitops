@@ -55,5 +55,12 @@ Everything else reaches the cluster by being merged to `main`.
 ## Guards live in the application repository
 
 The specs that check these manifests against CI and the nix config are in
-`worker/src/test/scala/deploy/` over there, because that is where the other half
-of each comparison lives. CI checks this repository out so they can read it.
+movies' `repochecks/` and `worker/` `src/test/scala/deploy/`, because that is where
+the other half of each comparison lives, and they read THIS repository's `main`
+(movies' `infra/bin/fetch-gitops`). So a push here can turn movies main red with
+no movies check run -- it did on 2026-11-17 (Main #2564). The pre-push hook
+(`scripts/hooks/pre-push`; install once per clone with `scripts/install-hooks.sh`)
+runs those specs (movies' `scripts/gitops-specs`) against the exact tree being
+pushed to `main` and refuses the push if any fails. A change that needs a movies
+change lands the movies side first. Bypass, `git push --no-verify`, is named in
+your report.

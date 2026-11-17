@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# movies-gitops pre-push: refuse a push to main that would turn MOVIES main red.
+#
+# The specs that check these manifests live in the movies repository (README, "Guards live in the application
+# repository") and read this repository's main. So a push here changes what movies main's specs see with no movies
+# check run: on 2026-11-17 5ec2eee added Flux's notification-controller, NodeMemoryBudgetSpec went over its reserve,
+# and movies Main #2564 went red on a push to this repository. This hook runs those specs (the movies lint registry's
+# `@gitops` rows, via movies' scripts/gitops-specs, in its own detached movies worktree at origin/main) against the
+# exact tree being pushed, before it reaches main.
+#
+# A gitops change that needs a movies change: land the movies side first, then push here.
+# Missing movies checkout, or the specs cannot run: BLOCKED, never a silent pass. Bypass: `git push --no-verify`,
+# named in your report. Not covered: image-automation's own commits (pushed from the cluster); they rewrite only the
+# setter-marked `image:` lines, which FluxImageAutomationSpec checks the shape of.
+# Install once per clone: scripts/install-hooks.sh. Environment: KINOWO_MOVIES_REPO (default ~/projects/movies).
+set -euo pipefail
+# git runs a hook with GIT_DIR (and friends) naming THIS repository; left set, every `git -C <movies>` below and in
+# gitops-specs would read and write this repository instead. The hook's own git calls run from the work tree's root.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_QUARANTINE_PATH
+
+movies="${KINOWO_MOVIES_REPO:-$HOME/projects/movies}"
+zero=0000000000000000000000000000000000000000
+while read -r _local_ref local_sha remote_ref _remote_sha; do
+    [ "$remote_ref" = refs/heads/main ] || continue
+    [ "$local_sha" = "$zero" ] && continue
+    [ -d "$movies/.git" ] || [ -f "$movies/.git" ] || {
+        echo "pre-push: BLOCKED -- no movies checkout at $movies to run its gitops-reading specs (KINOWO_MOVIES_REPO)" >&2; exit 1; }
+    tmp="$(mktemp -d -t gitops-prepush.XXXXXX)"
+    trap 'rm -rf "$tmp"' EXIT
+    git -C "$movies" fetch --quiet origin main || { echo "pre-push: BLOCKED -- cannot fetch movies origin/main" >&2; exit 1; }
+    # main's copy of the tool, not whatever the movies checkout happens to have
+    git -C "$movies" show origin/main:scripts/gitops-specs > "$tmp/gitops-specs" \
+        || { echo "pre-push: BLOCKED -- movies origin/main has no scripts/gitops-specs" >&2; exit 1; }
+    chmod +x "$tmp/gitops-specs"
+    mkdir "$tmp/tree"
+    git archive "$local_sha" | tar -x -C "$tmp/tree"
+    echo "pre-push: movies' gitops-reading specs against $(git rev-parse --short "$local_sha")" >&2
+    if ! KINOWO_MOVIES_REPO="$movies" "$tmp/gitops-specs" --manifests "$tmp/tree" >&2; then
+        echo "pre-push: BLOCKED -- $(git rev-parse --short "$local_sha") would turn movies main red (above). Land the movies side first." >&2
+        exit 1
+    fi
+done
+exit 0
