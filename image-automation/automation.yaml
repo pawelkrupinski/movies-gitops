@@ -82,9 +82,12 @@ spec:
   # registry (name AND tag) at the first `main-*` tag CI publishes here -- so nothing pointed at
   # an image that did not exist yet.
   image: registry.kinowo.net/movies-web
-  # Five minutes, matching the config source: this is the floor on how long a green build waits
-  # before it is live, and the registry call is cheap.
-  interval: 5m
+  # ONE MINUTE (2026-11-17, owner's "2a"). This scan is the first of the two waits between a green
+  # build and a live pod, and at 5m it was measured at 2.8 min p50 / 4.6 p90 from tag to the
+  # automation's commit. The registry is our own (registry.kinowo.net, anonymous reads, one tag
+  # list per call), so a scan a minute costs nothing worth saving. The second wait -- the config
+  # source's poll -- is gone too: receiver.yaml reconciles it on GitHub's push webhook.
+  interval: 1m
 ---
 apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImagePolicy
@@ -107,9 +110,9 @@ metadata:
   name: movies-worker
   namespace: flux-system
 spec:
-  # registry.kinowo.net, as movies-web above.
+  # registry.kinowo.net, and every minute, as movies-web above.
   image: registry.kinowo.net/movies-worker
-  interval: 5m
+  interval: 1m
 ---
 apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImagePolicy
@@ -129,7 +132,7 @@ spec:
 # THE ONE-COUNTRY CANARY (movies repo docs/design/identity-rollout.md; review 2026-11-06, P4). A second
 # scan of the SAME registry repository, with a policy of its own, that only the Spain overlay's
 # image line follows (worker/overlays/es/kustomization.yaml). On every ordinary deploy both scans
-# see the new tag within 5 minutes and all five workers roll as before. To roll Spain FIRST, the
+# see the new tag within a minute and all five workers roll as before. To roll Spain FIRST, the
 # fleet's scan is held -- `flux suspend image repository movies-worker` -- before the push lands:
 # its policy keeps the tag it last saw, so only Spain's line moves. After
 # `scripts/deploy-watch --image <tag> --countries es` passes, `flux resume image repository
@@ -142,7 +145,7 @@ metadata:
   namespace: flux-system
 spec:
   image: registry.kinowo.net/movies-worker
-  interval: 5m
+  interval: 1m
 ---
 apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImagePolicy
@@ -191,7 +194,9 @@ metadata:
   name: movies
   namespace: flux-system
 spec:
-  interval: 5m
+  # Matches the movies scans above (1m), so a tag a scan just picked is committed within a minute
+  # rather than waiting out a five-minute poll of its own.
+  interval: 1m
   sourceRef:
     kind: GitRepository
     name: movies-write

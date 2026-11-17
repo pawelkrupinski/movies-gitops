@@ -1,0 +1,93 @@
+# GitHub's push webhook, so a commit here reaches the cluster at once instead of at the next poll.
+#
+# ------------------------------------------------------------------------------------------------
+# WHY (2026-11-17, owner's "2a")
+# ------------------------------------------------------------------------------------------------
+#
+# A deploy waited on two back-to-back five-minute polls: the registry scan (automation.yaml) and
+# then the `movies` GitRepository (flux/gotk-sync.yaml) noticing the automation's own commit.
+# The second was measured at 3.4 min p50 / 5.0 p90 from the gitops commit to the pod being created.
+# This Receiver makes it event-driven: GitHub POSTs every push on this repository to
+# notification-controller, which annotates `movies` for an immediate reconcile; the Kustomizations
+# follow the new artifact by themselves. The 5m poll stays as the fallback for a missed delivery.
+#
+# ------------------------------------------------------------------------------------------------
+# THE PATH TO IT, and what checks a request
+# ------------------------------------------------------------------------------------------------
+#
+#   GitHub -> https://flux.kinowo.net/hook/<digest>   (Caddy on monitoring-1, movies repo
+#             infra/nix/hosts/monitoring-1/default.nix; that vhost publishes `/hook/*` and 404s
+#             everything else)
+#          -> 10.43.92.92:80, the Service below        (ClusterIP pinned so the vhost can name it,
+#             as headlamp/deployment.yaml does)
+#          -> notification-controller :9292
+#
+# Two things stand between the internet and a reconcile: the path's digest is sha256(token + name +
+# namespace), unguessable without the token; and the `github` receiver verifies every request's
+# X-Hub-Signature-256 HMAC against that same token and drops anything unsigned. A request that
+# passes both can only do one thing -- make Flux fetch main sooner -- which is no capability at all.
+#
+# THE TOKEN IS NOT IN GIT. `webhook-token` (key `token`) is pushed from the operator's vault
+# (`FLUX_WEBHOOK_TOKEN`, namespace `movies`) by the movies repo's infra/bin/push-k8s-secrets, per its
+# infra/k8s-secrets/secrets.map; the same value is the GitHub webhook's secret. Rotating it changes
+# the digest, so the webhook URL is re-registered from `kubectl -n flux-system get receiver
+# movies-gitops -o jsonpath='{.status.webhookPath}'`.
+apiVersion: notification.toolkit.fluxcd.io/v1
+kind: Receiver
+metadata:
+  name: movies-gitops
+  namespace: flux-system
+spec:
+  type: github
+  events:
+    - push
+  secretRef:
+    name: webhook-token
+  resources:
+    - apiVersion: source.toolkit.fluxcd.io/v1
+      kind: GitRepository
+      name: movies
+---
+# The receiver port on a FIXED address. Flux's own `webhook-receiver` Service (gotk-components.yaml)
+# gets whatever ClusterIP the apiserver hands out, and editing that generated file would be undone
+# by the next `flux install --export`; a second Service is an addition, not an edit.
+apiVersion: v1
+kind: Service
+metadata:
+  name: webhook-receiver-pinned
+  namespace: flux-system
+spec:
+  type: ClusterIP
+  clusterIP: 10.43.92.92
+  selector:
+    app: notification-controller
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: http-webhook
+---
+# Flux's `allow-webhooks` admits 9292 from pods only (`namespaceSelector: {}`), and Caddy is a host
+# process on monitoring-1. As flux-metrics/services.yaml explains, host traffic through a ClusterIP
+# arrives either un-SNATed from the fleet subnet or masqueraded from the pod network, so both CIDRs.
+# Neither is public: this admits the fleet's own hosts, which is where the proxy is.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-webhooks-from-the-fleet
+  namespace: flux-system
+spec:
+  podSelector:
+    matchLabels:
+      app: notification-controller
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 10.20.0.0/24
+        - ipBlock:
+            cidr: 10.42.0.0/16
+      ports:
+        - port: 9292
+          protocol: TCP

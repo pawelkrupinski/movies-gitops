@@ -18,7 +18,7 @@ in 36 of them. The same clone here is 2.2 seconds.
 | --- | --- |
 | `web/`, `worker/` | the two app tiers: a shared `base/` and one overlay per country |
 | `flux/` | Flux's own components and what it watches (`gotk-sync.yaml`) |
-| `image-automation/` | the registry scan, the tag policy, and the automation that commits it |
+| `image-automation/` | the registry scan, the tag policy, the automation that commits it, and the GitHub push Receiver (`receiver.yaml`) |
 | `flux-metrics/` | metrics Services + the NetworkPolicy that lets Prometheus scrape Flux |
 | `headlamp/`, `reloader/`, `kube-state-metrics/` | cluster add-ons |
 
@@ -28,6 +28,10 @@ CI in the application repository builds an image and pushes three tags, one of
 which sorts (`main-<utc>-<sha7>`). `image-reflector-controller` sees it,
 `image-automation-controller` commits it into `web/base/all.yaml` or
 `worker/base/all.yaml`, and `kustomize-controller` applies it.
+The registry is scanned every minute, and the commit reaches the cluster without
+waiting for a poll: GitHub's push webhook on this repository hits the
+notification-controller `Receiver` at `https://flux.kinowo.net/hook/<digest>`,
+which reconciles the `movies` GitRepository at once (`image-automation/receiver.yaml`).
 
 **The `image:` lines in those two files are written by a machine.** `git log` on
 them is the deploy history, and `git revert` is the rollback. Editing one by hand
