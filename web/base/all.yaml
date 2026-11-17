@@ -192,19 +192,26 @@ spec:
         # Caddy, so it never carries the prefix -- and `modules.AppLoader.rootOperationalRoutes`
         # keeps `/health` and `/metrics` answering at the root wherever the app is mounted, exactly
         # so this stays one path for all five. Do not "fix" this to /uk/health.
+        #
+        # POLLED EVERY 2 s, the tolerance kept: 150 x 2 s = the 300 s boot budget of 30 x 10 s,
+        # and 15 x 2 s = readiness's 30 s of 3 x 10 s, so a slow boot or a GC pause is excused
+        # exactly as long as before. At 10 s a pod that was up waited up to 10 s for the startup
+        # probe to notice and up to 10 s more for the first readiness probe after it: ~10 s a pod
+        # on average, every rollout, for 0.5 cheap requests a second per pod (`/health` never
+        # waits on data, HealthController).
         startupProbe:
           httpGet:
             path: /health
             port: http
-          periodSeconds: 10
-          failureThreshold: 30
+          periodSeconds: 2
+          failureThreshold: 150
         readinessProbe:
           httpGet:
             path: /health
             port: http
-          periodSeconds: 10
+          periodSeconds: 2
           timeoutSeconds: 5
-          failureThreshold: 3
+          failureThreshold: 15
         livenessProbe:
           httpGet:
             path: /health
