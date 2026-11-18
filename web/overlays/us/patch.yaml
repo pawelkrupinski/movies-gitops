@@ -72,7 +72,7 @@ spec:
             requests:
               # CPU as UK and DE: half Poland's.
               #
-              # MEMORY IS THE US EXCEPTION -- 1536Mi (2Gi until 2026-10-03), not the base 1Gi. The note that used to sit
+              # MEMORY IS THE US EXCEPTION -- 1408Mi (2Gi until 2026-10-03, 1536Mi until 2026-11-18), not the base 1Gi. The note that used to sit
               # here said the big roster was "a WORKER-side cost" because "the web tier serves
               # one city at a time and its MovieCache is sized by films on screen, not by venues
               # scraped". That is true of every country except this one: a US city IS a state,
@@ -93,7 +93,13 @@ spec:
               # alone is 486 venues in one 18.9 MB page. Revisit once a state's page is split per
               # metro (/:city/:area/); that is what makes this the largest web request.
               cpu: "750m"
-              memory: 1536Mi
+              # 1408Mi since 2026-11-18 (1536Mi, the limit, before): its 14-day RSS peak to that day was
+              # 1251 MiB (`max_over_time(process_resident_memory_bytes{instance="kinowo-web-us"}[14d])`),
+              # so 1536 held 285Mi it never touched -- twice over, as the largest web pod is also the
+              # surge every rollout must place. With coredns counted, the node had 58Mi left after that
+              # surge; this gives 256Mi back to it. The LIMIT stays 1536Mi: what the heap and non-heap
+              # need is unchanged, and NodeMemoryBudgetSpec holds the request between the peak and 1.4x.
+              memory: 1408Mi
             limits:
               memory: 1536Mi
 ---
