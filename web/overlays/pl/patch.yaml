@@ -49,9 +49,12 @@ spec:
               # surges: web-es sat Pending and Spain served the wrong image until its old pod was
               # deleted by hand. These numbers come from `max_over_time` of each pod's own
               # `process_cpu_seconds_total` over 24h. `NodeCpuBudgetSpec` holds the sum.
-              # pl web peaked at 0.30 cores. It is the busiest site by traffic, which
-              # is why it keeps the largest web request of the non-US countries.
-              cpu: "500m"
+              # pl web peaked at 0.30 cores over 24h then; over the 14 days to 2026-11-18 its 5-minute
+              # rate peaked at 263m (p99 223m), so 500m held twice what it uses. 300m since that day:
+              # with every system pod counted (NodeCpuBudgetSpec), the node had 105m left after
+              # web-us's surge against a 100m floor; this gives it 305m. It is the busiest site by
+              # traffic, but de and uk peak higher (312m, 339m) on the same 300m and 400m.
+              cpu: "300m"
               memory: 1Gi
             limits:
               memory: 1Gi
