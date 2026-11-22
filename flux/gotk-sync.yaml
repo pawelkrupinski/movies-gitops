@@ -52,7 +52,7 @@
 # github.com and this source read it anonymously; from the GitHub suspension (2026-10-19) to the
 # return (github-return plan, Phase 3) it lived on the self-hosted Forgejo on bitcashier's ci-runner,
 # and now it is read from github.com again over ssh with a read-only deploy key
-# (movies infra/bin/flux-cutover-github mints it; flux-cutover-forgejo is the rollback).
+# (movies infra/bin/flux-rotate-deploy-keys mints and rotates it).
 # The write path is still a SEPARATE source with its own key (`movies-write` in
 # image-automation/automation.yaml), so revoking the write key stops DEPLOYS and leaves config
 # reconciliation working. `flux-git-read` carries `identity`, `identity.pub` and `known_hosts`.
